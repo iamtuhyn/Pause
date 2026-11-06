@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo Room</title>
+<link rel="stylesheet" href="../shared/base.css">
+<style>
+  :root { --accent: #a78bfa; }
+  .frame { position: relative; }
+  .panel {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, .78); border-radius: var(--radius);
+  }
+  .panel[hidden] { display: none; }
+  .panel .box { text-align: center; padding: 24px; max-width: 460px; }
+  .panel h2 { margin: 0 0 8px; font-size: 30px; }
+  .panel p { color: var(--muted); margin: 0 0 18px; line-height: 1.6; }
+  .legend { display: flex; justify-content: center; gap: 16px; font-size: 13px; color: var(--muted); margin-bottom: 18px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="back" href="../index.html">← Arcade</a>
+  <h1><span>◎</span> Echo Room</h1>
+  <div class="spacer"></div>
+  <div class="hud">
+    <span class="pill">Room <b id="hRoom">1</b></span>
+    <span class="pill">Pings <b id="hPings">0</b></span>
+    <span class="pill">Lives <b id="hLives">♥♥♥</b></span>
+  </div>
+</header>
+<main class="stage">
+  <div class="frame">
+    <canvas id="c" class="game" width="960" height="600"></canvas>
+    <div class="panel" id="panel"><div class="box">
+      <h2 id="pTitle">Echo Room</h2>
+      <p id="pText">Lights out. Ping, and the walls glow for a moment. Put on headphones and follow the chime: it grows louder as you near the exit.</p>
+      <div class="legend" id="pLegend">
+        <span><i class="dot" style="background:#c4b5fd"></i>Walls</span>
+        <span><i class="dot" style="background:#7cffb2"></i>Exit</span>
+        <span><i class="dot" style="background:#ff5d73"></i>Listeners (room 3+)</span>
+      </div>
+      <button class="btn primary" id="pBtn">Enter the dark</button>
+    </div></div>
+  </div>
+  <div class="touch">
+    <div class="group">
+      <button data-k="left">◀</button><button data-k="up">▲</button><button data-k="down">▼</button><button data-k="right">▶</button>
+    </div>
+    <div class="group"><button data-k="ping">◎</button></div>
+  </div>
+  <div class="help">
+    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows move &nbsp; <kbd>Space</kbd> or click to ping &nbsp; <kbd>M</kbd> mute.
+    Bumping a wall shows a little of it, but makes a sound. From room 3, red listeners drift toward any noise, so tread softly.
+  </div>
+</main>
+
+<script src="../shared/award.js"></script>
+<script>
+(() => {
+const W = 960, H = 600;
+const ACCENT = '#a78bfa';
+const GAME = { gameId: 'echo-room', gameName: 'Echo Room', accent: ACCENT, glyph: '◎' };
+const WAVE = 650;          // px per second for the visual ping
+const FADE = 2.2;          // seconds a revealed point stays visible
+const RAYS = 420;
+const COOLDOWN = 0.55;
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// ---------- Audio ----------
+let ac = null, master = null, muted = false;
+function audio() {
+  if (!ac) {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = 0.7; master.connect(ac.destination);
+  }
+  if (ac.state === 'suspended') ac.resume();
+  return ac;
+}
+function tone({ freq = 440, to = null, dur = 0.15, type = 'sine', vol = 0.3, pan = 0, delay = 0, lp = null }) {
+  if (!ac || muted) return;
+  const t0 = ac.currentTime + delay;
+  const o = ac.createOscillator(); o.type = type;
+  o.frequency.setValueAtTime(freq, t0);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  let node = o; o.connect(g); node = g;
+  if (lp) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; node.connect(f); node = f; }
+  if (ac.createStereoPanner) { const p = ac.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); node.connect(p); node = p; }
+  node.connect(master);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function noiseBurst(vol, dur, lp) {
+  if (!ac || muted) return;
+  const len = Math.floor(ac.sampleRate * dur);
+  const buf = ac.createBuffer(1, len, ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const s = ac.createBufferSource(); s.buffer = buf;
+  const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp;
+  const g = ac.createGain(); g.gain.value = vol;
+  s.connect(f); f.connect(g); g.connect(master); s.start();
+}
+
+// ---------- Maze ----------
+let maze, segs, cell, ox, oy, cols, rows;
+function buildMaze(n) {
+  cols = Math.min(16, 6 + n);
+  rows = Math.min(9, 4 + Math.ceil(n / 2));
+  cell = Math.floor(Math.min((W - 40) / cols, (H - 40) / rows));
+  ox = Math.floor((W - cols * cell) / 2);
+  oy = Math.floor((H - rows * cell) / 2);
+  // walls[r][c] = {n,e,s,w}
+  const walls = [];
+  for (let r = 0; r < rows; r++) { walls.push([]); for (let c = 0; c < cols; c++) walls[r].push({ n: 1, e: 1, s: 1, w: 1 }); }
+  const seen = new Set(), stack = [[0, 0]];
+  seen.add('0,0');
+  const DIRS = [[0, -1, 'n', 's'], [1, 0, 'e', 'w'], [0, 1, 's', 'n'], [-1, 0, 'w', 'e']];
+  while (stack.length) {
+    const [c, r] = stack[stack.length - 1];
+    const opts = DIRS.filter(([dc, dr]) => {
+      const nc = c + dc, nr = r + dr;
+      return nc >= 0 && nr >= 0 && nc < cols && nr < rows && !seen.has(nc + ',' + nr);
+    });
+    if (!opts.length) { stack.pop(); continue; }
+    const [dc, dr, a, b] = opts[Math.floor(Math.random() * opts.length)];
+    walls[r][c][a] = 0; walls[r + dr][c + dc][b] = 0;
+    seen.add((c + dc) + ',' + (r + dr)); stack.push([c + dc, r + dr]);
+  }
+  // Knock out a few extra walls so there's more than one route.
+  const extra = Math.floor(cols * rows * 0.08);
+  for (let i = 0; i < extra; i++) {
+    const c = 1 + Math.floor(Math.random() * (cols - 2)), r = Math.floor(Math.random() * rows);
+    walls[r][c].e = 0; walls[r][c + 1].w = 0;
+  }
+  segs = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const x = ox + c * cell, y = oy + r * cell, w = walls[r][c];
+    if (w.n) segs.push([x, y, x + cell, y]);
+    if (w.w) segs.push([x, y, x, y + cell]);
+    if (c === cols - 1 && w.e) segs.push([x + cell, y, x + cell, y + cell]);
+    if (r === rows - 1 && w.s) segs.push([x, y + cell, x + cell, y + cell]);
+  }
+  return walls;
+}
+
+function neighbors(c, r) {
+  const w = maze[r][c], out = [];
+  if (!w.n) out.push([c, r - 1]); if (!w.s) out.push([c, r + 1]);
+  if (!w.e) out.push([c + 1, r]); if (!w.w) out.push([c - 1, r]);
+  return out;
+}
+function bfs(from) {
+  const dist = {}, prev = {};
+  const k = (p) => p[0] + ',' + p[1];
+  dist[k(from)] = 0;
+  const q = [from];
+  while (q.length) {
+    const p = q.shift();
+    for (const n of neighbors(p[0], p[1])) {
+      if (dist[k(n)] === undefined) { dist[k(n)] = dist[k(p)] + 1; prev[k(n)] = p; q.push(n); }
+    }
+  }
+  return { dist, prev };
+}
+const cellOf = (x, y) => [Math.max(0, Math.min(cols - 1, Math.floor((x - ox) / cell))), Math.max(0, Math.min(rows - 1, Math.floor((y - oy) / cell)))];
+const centerOf = (c, r) => [ox + c * cell + cell / 2, oy + r * cell + cell / 2];
+
+// ---------- Game state ----------
+let room = 1, lives = 3, pings = 0, roomPings = 0, runStart = 0;
+let player, exit, listeners, points, rings, lastPing = -9, lastBump = -9, beaconT = 0, state = 'menu';
+const keys = {};
+
+function startRoom(keepMaze) {
+  if (!keepMaze) {
+    maze = buildMaze(room);
+    // Exit goes in the cell farthest from the start.
+    const { dist } = bfs([0, 0]);
+    let best = [cols - 1, rows - 1], bd = -1;
+    for (const key in dist) if (dist[key] > bd) { bd = dist[key]; best = key.split(',').map(Number); }
+    exit = { c: best[0], r: best[1] };
+  }
+  const [px, py] = centerOf(0, 0);
+  player = { x: px, y: py, r: Math.max(5, cell * 0.14) };
+  const [ex, ey] = centerOf(exit.c, exit.r);
+  exit.x = ex; exit.y = ey; exit.rad = cell * 0.28;
+  points = []; rings = [];
+  roomPings = 0;
+  listeners = [];
+  const count = room >= 3 ? Math.min(4, Math.floor((room - 1) / 2)) : 0;
+  const { dist } = bfs([0, 0]);
+  const far = Object.keys(dist).filter((k) => dist[k] >= Math.max(4, (cols + rows) / 2)).map((k) => k.split(',').map(Number));
+  for (let i = 0; i < count && far.length; i++) {
+    const [c, r] = far.splice(Math.floor(Math.random() * far.length), 1)[0];
+    const [x, y] = centerOf(c, r);
+    listeners.push({ x, y, target: null, path: [], speed: cell * (0.9 + room * 0.04), idle: 0 });
+  }
+  hud();
+  state = 'play';
+}
+
+function hud() {
+  document.getElementById('hRoom').textContent = room;
+  document.getElementById('hPings').textContent = pings;
+  document.getElementById('hLives').textContent = '♥'.repeat(lives) + '♡'.repeat(3 - lives);
+}
+
+// ---------- Geometry ----------
+function raySeg(px, py, dx, dy, s) {
+  const [x1, y1, x2, y2] = s;
+  const ex = x2 - x1, ey = y2 - y1;
+  const den = dx * ey - dy * ex;
+  if (Math.abs(den) < 1e-9) return Infinity;
+  const t = ((x1 - px) * ey - (y1 - py) * ex) / den;
+  const u = ((x1 - px) * dy - (y1 - py) * dx) / den;
+  return t > 0 && u >= 0 && u <= 1 ? t : Infinity;
+}
+function rayCircle(px, py, dx, dy, cx, cy, r) {
+  const fx = px - cx, fy = py - cy;
+  const b = fx * dx + fy * dy, c = fx * fx + fy * fy - r * r;
+  const d = b * b - c;
+  if (d < 0) return Infinity;
+  const t = -b - Math.sqrt(d);
+  return t > 0 ? t : Infinity;
+}
+
+// ---------- Actions ----------
+function ping(now) {
+  if (state !== 'play' || now - lastPing < COOLDOWN) return;
+  lastPing = now;
+  pings++; roomPings++; hud();
+  const { x, y } = player;
+  rings.push({ x, y, t: now });
+  const dirDist = { l: Infinity, r: Infinity, u: Infinity, d: Infinity };
+  for (let i = 0; i < RAYS; i++) {
+    const a = (i / RAYS) * Math.PI * 2;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    let best = Infinity;
+    for (const s of segs) { const t = raySeg(x, y, dx, dy, s); if (t < best) best = t; }
+    let kind = 'wall', hit = best;
+    const te = rayCircle(x, y, dx, dy, exit.x, exit.y, exit.rad);
+    if (te < hit) { hit = te; kind = 'exit'; }
+    for (const L of listeners) {
+      const tl = rayCircle(x, y, dx, dy, L.x, L.y, cell * 0.2);
+      if (tl < hit) { hit = tl; kind = 'listener'; }
+    }
+    if (hit === Infinity) continue;
+    points.push({ x: x + dx * hit, y: y + dy * hit, at: now + hit / WAVE, kind });
+    // Track distance in each cardinal direction for the echo sound
+    if (Math.abs(dx) > 0.92) { if (dx < 0) dirDist.l = Math.min(dirDist.l, best); else dirDist.r = Math.min(dirDist.r, best); }
+    if (Math.abs(dy) > 0.92) { if (dy < 0) dirDist.u = Math.min(dirDist.u, best); else dirDist.d = Math.min(dirDist.d, best); }
+  }
+  // Sound: the ping, then one echo per direction. Longer delay = more open space that way.
+  tone({ freq: 1320, to: 660, dur: 0.18, vol: 0.25 });
+  const echo = (d, pan, f) => { if (d < Infinity) tone({ freq: f, dur: 0.12, vol: 0.12 * Math.max(0.25, 1 - d / 700), pan, delay: 0.05 + d / 900, lp: 2200 }); };
+  echo(dirDist.l, -0.9, 990); echo(dirDist.r, 0.9, 990); echo(dirDist.u, 0, 880); echo(dirDist.d, 0, 740);
+  alertListeners(x, y, 99);
+}
+
+function alertListeners(x, y, rangeCells) {
+  const src = cellOf(x, y);
+  for (const L of listeners) {
+    const from = cellOf(L.x, L.y);
+    const { dist, prev } = bfs(from);
+    const d = dist[src[0] + ',' + src[1]];
+    if (d === undefined || d > rangeCells) continue;
+    const path = [];
+    let p = src;
+    while (p && !(p[0] === from[0] && p[1] === from[1])) { path.unshift(p); p = prev[p[0] + ',' + p[1]]; }
+    L.path = path; L.idle = 0;
+  }
+}
+
+function bump(now, px, py, s) {
+  if (now - lastBump < 0.35) return;
+  lastBump = now;
+  noiseBurst(0.35, 0.12, 380);
+  // Show a short stretch of the wall we touched
+  const [x1, y1, x2, y2] = s;
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  const t0 = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / (len * len);
+  for (let i = -8; i <= 8; i++) {
+    const t = t0 + (i * 3) / len;
+    if (t < 0 || t > 1) continue;
+    points.push({ x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t, at: now, kind: 'wall', soft: true });
+  }
+  alertListeners(px, py, 3);
+}
+
+// ---------- Update ----------
+function update(dt, now) {
+  if (state !== 'play') return;
+  const sp = cell * 2.2;
+  let dx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  let dy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+  if (dx && dy) { dx *= Math.SQRT1_2; dy *= Math.SQRT1_2; }
+  player.x += dx * sp * dt; player.y += dy * sp * dt;
+  for (const s of segs) {
+    const [x1, y1, x2, y2] = s;
+    const ex = x2 - x1, ey = y2 - y1;
+    const t = Math.max(0, Math.min(1, ((player.x - x1) * ex + (player.y - y1) * ey) / (ex * ex + ey * ey)));
+    const cx = x1 + ex * t, cy = y1 + ey * t;
+    const d = Math.hypot(player.x - cx, player.y - cy);
+    if (d < player.r && d > 0) {
+      player.x = cx + ((player.x - cx) / d) * player.r;
+      player.y = cy + ((player.y - cy) / d) * player.r;
+      if (dx || dy) bump(now, cx, cy, s);
+    }
+  }
+
+  // Listeners
+  for (const L of listeners) {
+    if (!L.path.length) {
+      L.idle -= dt;
+      if (L.idle <= 0) { // wander one cell
+        const n = neighbors(...cellOf(L.x, L.y));
+        L.path = [n[Math.floor(Math.random() * n.length)]];
+        L.idle = 1.5 + Math.random() * 2;
+        L.wander = true;
+      }
+    }
+    if (L.path.length) {
+      const [tx, ty] = centerOf(...L.path[0]);
+      const ddx = tx - L.x, ddy = ty - L.y, d = Math.hypot(ddx, ddy);
+      const v = L.speed * (L.wander ? 0.45 : 1) * dt;
+      if (d <= v) { L.x = tx; L.y = ty; L.path.shift(); if (!L.path.length) L.wander = false; }
+      else { L.x += (ddx / d) * v; L.y += (ddy / d) * v; }
+    }
+    const dP = Math.hypot(L.x - player.x, L.y - player.y);
+    if (dP < player.r + cell * 0.2) { caught(); return; }
+  }
+
+  // Exit beacon: a chime from the exit's direction, louder when near
+  beaconT -= dt;
+  if (beaconT <= 0) {
+    beaconT = 2.4;
+    const ddx = exit.x - player.x, ddy = exit.y - player.y;
+    const d = Math.hypot(ddx, ddy);
+    tone({ freq: 523, dur: 0.6, vol: 0.02 + 0.16 * Math.max(0, 1 - d / 700), pan: ddx / 300, type: 'triangle', lp: 1800 });
+    tone({ freq: 784, dur: 0.6, vol: 0.01 + 0.08 * Math.max(0, 1 - d / 700), pan: ddx / 300, type: 'triangle', lp: 1800, delay: 0.12 });
+  }
+  // Listener rumble when one is near
+  let nearest = Infinity;
+  for (const L of listeners) nearest = Math.min(nearest, Math.hypot(L.x - player.x, L.y - player.y));
+  if (nearest < cell * 2.5 && Math.random() < dt * 3) {
+    const pL = listeners.reduce((a, b) => (Math.hypot(a.x - player.x, a.y - player.y) < Math.hypot(b.x - player.x, b.y - player.y) ? a : b));
+    tone({ freq: 70, dur: 0.25, type: 'sawtooth', vol: 0.12 * (1 - nearest / (cell * 2.5)), pan: (pL.x - player.x) / 200, lp: 300 });
+  }
+
+  if (Math.hypot(exit.x - player.x, exit.y - player.y) < exit.rad + player.r * 0.5) roomCleared();
+}
+
+function caught() {
+  state = 'caught';
+  noiseBurst(0.6, 0.5, 900);
+  tone({ freq: 220, to: 55, dur: 0.6, type: 'sawtooth', vol: 0.25 });
+  lives--;
+  hud();
+  if (lives <= 0) {
+    showPanel('Lights back on', `You found your way through ${room - 1} room${room - 1 === 1 ? '' : 's'} with ${pings} pings.`, 'Have another go', () => { room = 1; lives = 3; pings = 0; runStart = performance.now() / 1000; startRoom(false); });
+  } else {
+    showPanel('A listener heard you', `${lives} ${lives === 1 ? 'life' : 'lives'} left. Same room, maybe a quieter path.`, 'Try this room again', () => startRoom(true));
+  }
+}
+
+function roomCleared() {
+  state = 'cleared';
+  [523, 659, 784, 1046].forEach((f, i) => tone({ freq: f, dur: 0.35, vol: 0.18, delay: i * 0.08, type: 'triangle' }));
+  const cleared = room;
+  const mins = Math.max(1, Math.round((performance.now() / 1000 - runStart) / 60));
+  const next = () => { room++; startRoom(false); };
+  showPanel(`Room ${cleared} cleared`, `${roomPings} ping${roomPings === 1 ? '' : 's'} in this room. The next one is bigger${cleared >= 2 ? ', and something is listening' : ''}.`, 'Next room', next);
+  const milestones = {
+    3: { tier: 'bronze', title: 'Night Walker', line: 'Found the exit of 3 dark rooms.' },
+    6: { tier: 'silver', title: 'Echo Navigator', line: 'Cleared 6 rooms, with listeners on your trail.' },
+    10: { tier: 'gold', title: 'Bat Sense', line: 'Cleared 10 rooms using nothing but echoes.' },
+  };
+  const m = milestones[cleared];
+  if (m) setTimeout(() => Award.unlock({ ...GAME, ...m, stats: [['Rooms', cleared], ['Pings', pings], ['Minutes', mins]] }), 500);
+}
+
+function showPanel(title, text, btn, fn) {
+  document.getElementById('pTitle').textContent = title;
+  document.getElementById('pText').textContent = text;
+  document.getElementById('pLegend').hidden = true;
+  const b = document.getElementById('pBtn');
+  b.textContent = btn;
+  b.onclick = () => { audio(); hidePanel(); fn(); };
+  document.getElementById('panel').hidden = false;
+  setTimeout(() => b.focus(), 50);
+}
+function hidePanel() { document.getElementById('panel').hidden = true; }
+
+// ---------- Draw ----------
+const COLORS = { wall: [196, 181, 253], exit: [124, 255, 178], listener: [255, 93, 115] };
+function draw(now) {
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  if (state === 'menu') return;
+
+  ctx.globalCompositeOperation = 'lighter';
+  for (const r of rings) {
+    const rad = (now - r.t) * WAVE;
+    const a = Math.max(0, 0.22 * (1 - rad / 900));
+    if (a <= 0) continue;
+    ctx.strokeStyle = `rgba(167,139,250,${a})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(r.x, r.y, rad, 0, Math.PI * 2); ctx.stroke();
+  }
+  rings = rings.filter((r) => (now - r.t) * WAVE < 900);
+
+  const keep = [];
+  for (const p of points) {
+    const age = now - p.at;
+    if (age < 0) { keep.push(p); continue; }
+    const life = p.soft ? 0.9 : FADE;
+    if (age > life) continue;
+    keep.push(p);
+    const a = Math.pow(1 - age / life, 1.6) * (p.soft ? 0.6 : 1);
+    const [r, g, b] = COLORS[p.kind];
+    const size = p.kind === 'wall' ? 2.4 : 3.4;
+    if (age < 0.12) { ctx.fillStyle = `rgba(${r},${g},${b},${a * 0.35})`; ctx.fillRect(p.x - 5, p.y - 5, 10, 10); }
+    ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
+    ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+  }
+  points = keep;
+
+  // The player always knows where they are
+  ctx.globalCompositeOperation = 'source-over';
+  const cool = Math.min(1, (now - lastPing) / COOLDOWN);
+  const glow = ctx.createRadialGradient(player.x, player.y, 0, player.x, player.y, player.r * 4);
+  glow.addColorStop(0, 'rgba(255,255,255,0.18)'); glow.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(player.x, player.y, player.r * 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(player.x, player.y, player.r * 0.55, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = `rgba(167,139,250,${0.25 + 0.6 * cool})`; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(player.x, player.y, player.r + 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * cool); ctx.stroke();
+}
+
+// ---------- Input ----------
+const KM = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down' };
+window.addEventListener('keydown', (e) => {
+  if (Award.isOpen()) return;
+  if (KM[e.code]) { keys[KM[e.code]] = true; e.preventDefault(); }
+  if (e.code === 'Space') { e.preventDefault(); if (state === 'play') ping(performance.now() / 1000); else if (!document.getElementById('panel').hidden) document.getElementById('pBtn').click(); }
+  if (e.code === 'KeyM') { muted = !muted; }
+});
+window.addEventListener('keyup', (e) => { if (KM[e.code]) keys[KM[e.code]] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+cv.addEventListener('pointerdown', () => { if (state === 'play') ping(performance.now() / 1000); });
+document.querySelectorAll('.touch button').forEach((b) => {
+  const k = b.dataset.k;
+  b.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); b.classList.add('on');
+    if (k === 'ping') { if (state === 'play') ping(performance.now() / 1000); return; }
+    keys[k] = true;
+  });
+  const up = () => { b.classList.remove('on'); if (k !== 'ping') keys[k] = false; };
+  b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); b.addEventListener('pointercancel', up);
+});
+
+document.getElementById('pBtn').onclick = () => {
+  audio(); hidePanel();
+  runStart = performance.now() / 1000;
+  startRoom(false);
+  ping(performance.now() / 1000);
+};
+
+let last = performance.now() / 1000;
+function frame() {
+  const now = performance.now() / 1000;
+  const dt = Math.min(0.05, now - last); last = now;
+  if (!Award.isOpen()) update(dt, now);
+  draw(now);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

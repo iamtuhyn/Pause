@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tilt Billiards</title>
+<link rel="stylesheet" href="../shared/base.css">
+<style>
+  :root { --accent: #6ee7ff; }
+  .frame { position: relative; }
+  .panel {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(5, 8, 16, .78); border-radius: var(--radius); backdrop-filter: blur(3px); text-align: center;
+  }
+  .panel[hidden] { display: none; }
+  .panel .box { padding: 24px; max-width: 460px; }
+  .panel h2 { margin: 0 0 8px; font-size: 30px; }
+  .panel p { color: var(--muted); margin: 0 0 18px; line-height: 1.6; }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  #gyro[hidden] { display: none; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="back" href="../index.html">← Arcade</a>
+  <h1><span>◐</span> Tilt Billiards</h1>
+  <div class="spacer"></div>
+  <div class="hud">
+    <span class="pill">Table <b id="hTable">1</b>/3</span>
+    <span class="pill">Next <b id="hNext">1</b></span>
+    <span class="pill">Fouls <b id="hFouls">0</b></span>
+  </div>
+</header>
+<main class="stage">
+  <div class="frame">
+    <canvas id="c" class="game" width="960" height="540" aria-label="Billiard table. Tilt it to roll the balls into the pockets in number order."></canvas>
+    <div class="panel" id="panel"><div class="box">
+      <h2 id="pTitle">Tilt Billiards</h2>
+      <p id="pText">No cue. Tip the whole table and let the balls roll home in order: 1, then 2, then 3. Pot the wrong one and it wanders back to the middle. Take your time.</p>
+      <div class="row">
+        <button class="btn primary" id="pBtn">Start tilting</button>
+        <button class="btn" id="gyro" hidden>Use phone tilt</button>
+      </div>
+    </div></div>
+  </div>
+  <div class="help">Mouse: point where you want the balls to roll; the further from the centre, the steeper. Keyboard: hold the arrow keys.
+  Touch: drag on the table, or use phone tilt. <kbd>R</kbd> restarts the table.</div>
+</main>
+
+<script src="../shared/award.js"></script>
+<script>
+(() => {
+const W = 960, H = 540, RAIL = 44, BALL = 13, POCKET = 24, G = 560;
+const TABLES = [3, 5, 7], PAR = [60, 90, 130];
+const COLOURS = ['#ffd166', '#1e4fd8', '#ff5d73', '#a78bfa', '#ff9f6b', '#2f8540', '#7a1f2b'];
+const GAME = { gameId: 'tilt-billiards', gameName: 'Tilt Billiards', accent: '#6ee7ff', glyph: '◐' };
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const L = RAIL, Rt = W - RAIL, Tp = RAIL, B = H - RAIL;
+// [x, y, catch radius]: side pockets sit back in the cushion, so a ball has to aim for them.
+const POCKETS = [[L, Tp, POCKET], [W / 2, Tp - 8, POCKET - 2], [Rt, Tp, POCKET], [L, B, POCKET], [W / 2, B + 8, POCKET - 2], [Rt, B, POCKET]];
+
+let table, balls, next, time, fouls, totalFouls, totalTime, tilt = { x: 0, y: 0 }, aim = null, keys = {}, gyro = null, state = 'menu', message = '', msgT = 0, sunk = [];
+
+function rack(n) {
+  balls = [];
+  for (let i = 1; i <= n; i++) {
+    let x, y, tries = 0;
+    do { x = L + 80 + Math.random() * (Rt - L - 160); y = Tp + 70 + Math.random() * (B - Tp - 140); tries++; }
+    while (tries < 200 && balls.some((b) => Math.hypot(b.x - x, b.y - y) < BALL * 3));
+    balls.push({ n: i, x, y, vx: 0, vy: 0, colour: COLOURS[(i - 1) % COLOURS.length] });
+  }
+}
+function startTable(i) { table = i; next = 1; time = 0; fouls = 0; sunk = []; rack(TABLES[i]); state = 'play'; say(`Table ${i + 1}: sink 1 to ${TABLES[i]} in order.`); }
+function newRun() { totalFouls = 0; totalTime = 0; awarded = {}; startTable(0); }
+function say(t) { message = t; msgT = 2.2; }
+
+// ---------- Tilt input ----------
+function readTilt(dt) {
+  let tx = 0, ty = 0;
+  if (gyro) { tx = gyro.x; ty = gyro.y; }
+  else if (aim) { tx = (aim.x - W / 2) / (W / 2 - RAIL); ty = (aim.y - H / 2) / (H / 2 - RAIL); }
+  if (keys.left) tx -= 1; if (keys.right) tx += 1; if (keys.up) ty -= 1; if (keys.down) ty += 1;
+  const m = Math.hypot(tx, ty); if (m > 1) { tx /= m; ty /= m; }
+  const k = Math.min(1, dt * 8);                 // ease, so the table "leans" rather than snaps
+  tilt.x += (tx - tilt.x) * k; tilt.y += (ty - tilt.y) * k;
+}
+
+// ---------- Physics ----------
+function step(dt) {
+  for (const b of balls) {
+    b.vx += tilt.x * G * dt; b.vy += tilt.y * G * dt;
+    const f = Math.exp(-0.7 * dt); b.vx *= f; b.vy *= f;
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    if (b.x < L + BALL) { b.x = L + BALL; b.vx = Math.abs(b.vx) * 0.7; }
+    if (b.x > Rt - BALL) { b.x = Rt - BALL; b.vx = -Math.abs(b.vx) * 0.7; }
+    if (b.y < Tp + BALL) { b.y = Tp + BALL; b.vy = Math.abs(b.vy) * 0.7; }
+    if (b.y > B - BALL) { b.y = B - BALL; b.vy = -Math.abs(b.vy) * 0.7; }
+  }
+  for (let i = 0; i < balls.length; i++) for (let j = i + 1; j < balls.length; j++) {
+    const a = balls[i], c = balls[j], dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy);
+    if (d > 0 && d < BALL * 2) {
+      const nx = dx / d, ny = dy / d, overlap = BALL * 2 - d;
+      a.x -= nx * overlap / 2; a.y -= ny * overlap / 2; c.x += nx * overlap / 2; c.y += ny * overlap / 2;
+      const rel = (c.vx - a.vx) * nx + (c.vy - a.vy) * ny;
+      if (rel < 0) { const imp = -(1 + 0.92) * rel / 2; a.vx -= imp * nx; a.vy -= imp * ny; c.vx += imp * nx; c.vy += imp * ny; }
+    }
+  }
+  for (const b of [...balls]) {
+    if (!POCKETS.some(([px, py, pr]) => Math.hypot(b.x - px, b.y - py) < pr)) continue;
+    if (b.n === next) {
+      balls.splice(balls.indexOf(b), 1); sunk.push(b.n); next++;
+      say(next > TABLES[table] ? 'Cleared!' : `${b.n} down. Now ${next}.`);
+    } else {
+      fouls++; totalFouls++;
+      b.x = W / 2; b.y = H / 2; b.vx = 0; b.vy = 0;
+      while (balls.some((o) => o !== b && Math.hypot(o.x - b.x, o.y - b.y) < BALL * 2.2)) b.y += BALL * 2.2;
+      say(`Not ${b.n} yet. Try ${next} first.`);
+    }
+  }
+}
+
+function update(dt) {
+  if (msgT > 0) msgT -= dt;
+  readTilt(dt);
+  if (state !== 'play') return;
+  time += dt;
+  for (let i = 0; i < 4; i++) step(dt / 4);
+  if (next > TABLES[table]) tableDone();
+  hud();
+}
+function hud() {
+  document.getElementById('hTable').textContent = table + 1;
+  document.getElementById('hNext').textContent = next > TABLES[table] ? '✓' : next;
+  document.getElementById('hFouls').textContent = totalFouls;
+}
+
+let awarded = {};
+function tableDone() {
+  state = 'pause'; totalTime += time;
+  checkAwards();
+  if (table + 1 >= TABLES.length) {
+    showPanel('All tables cleared.', `Every ball home, with ${totalFouls} foul${totalFouls === 1 ? '' : 's'} along the way.`, 'Play again', newRun);
+  } else {
+    showPanel(`Table ${table + 1} cleared`, `${fouls} foul${fouls === 1 ? '' : 's'}. Next table: ${TABLES[table + 1]} balls.`, 'Next table', () => startTable(table + 1));
+  }
+}
+function checkAwards() {
+  const cleared = table + 1;
+  const stats = [['Tables', `${cleared} / 3`], ['Fouls', totalFouls]];
+  if (cleared === 3 && totalFouls === 0 && !awarded.gold) { awarded.gold = true; return Award.unlock({ ...GAME, tier: 'gold', title: 'Steady Hands', line: 'Cleared all three tables in order without a single foul.', stats }); }
+  if (cleared === 3 && !awarded.silver) { awarded.silver = true; return Award.unlock({ ...GAME, tier: 'silver', title: 'Table Tilter', line: 'Rolled every ball home on all three tables.', stats }); }
+  if (cleared === 1 && !awarded.bronze) { awarded.bronze = true; return Award.unlock({ ...GAME, tier: 'bronze', title: 'No Cue Needed', line: 'Cleared the first table by tilting alone.', stats }); }
+}
+
+function showPanel(title, text, btn, fn) {
+  document.getElementById('pTitle').textContent = title;
+  document.getElementById('pText').textContent = text;
+  const b = document.getElementById('pBtn'); b.textContent = btn;
+  b.onclick = () => { document.getElementById('panel').hidden = true; fn(); };
+  document.getElementById('panel').hidden = false; b.focus();
+}
+document.getElementById('pBtn').onclick = () => { document.getElementById('panel').hidden = true; newRun(); };
+
+// Inputs: pointer aim, arrow keys, and (opt-in) phone tilt.
+function toCanvas(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) }; }
+cv.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' || e.buttons) aim = toCanvas(e); });
+cv.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') { cv.setPointerCapture(e.pointerId); aim = toCanvas(e); } });
+cv.addEventListener('pointerup', (e) => { if (e.pointerType !== 'mouse') aim = null; });
+cv.addEventListener('pointerleave', () => { aim = null; });
+const KEYMAP = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
+window.addEventListener('keydown', (e) => {
+  if (Award.isOpen()) return;
+  if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
+  if (e.code === 'KeyR' && state === 'play') { totalFouls -= fouls; startTable(table); }
+});
+window.addEventListener('keyup', (e) => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; });
+window.addEventListener('blur', () => { keys = {}; });
+
+const gyroBtn = document.getElementById('gyro');
+if ('DeviceOrientationEvent' in window && matchMedia('(pointer: coarse)').matches) gyroBtn.hidden = false;
+gyroBtn.onclick = async () => {
+  try {
+    if (typeof DeviceOrientationEvent.requestPermission === 'function' && (await DeviceOrientationEvent.requestPermission()) !== 'granted') return;
+    window.addEventListener('deviceorientation', (e) => {
+      const landscape = Math.abs(window.orientation || 0) === 90;
+      const a = (landscape ? e.beta : e.gamma) || 0, b = (landscape ? -e.gamma : e.beta) || 0;
+      gyro = { x: Math.max(-1, Math.min(1, a / 25)), y: Math.max(-1, Math.min(1, (b - 20) / 25)) };
+    });
+    gyroBtn.textContent = 'Phone tilt on';
+  } catch (err) { gyroBtn.textContent = 'Tilt not available'; }
+};
+
+// ---------- Draw ----------
+function draw() {
+  ctx.fillStyle = '#0b0d14'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#5a3a24'; ctx.beginPath(); ctx.roundRect(8, 8, W - 16, H - 16, 26); ctx.fill();
+  // The felt shades toward the low side, so the slope is visible.
+  const gx = W / 2 + tilt.x * 300, gy = H / 2 + tilt.y * 180;
+  const felt = ctx.createRadialGradient(W - gx, H - gy, 40, gx, gy, 620);
+  felt.addColorStop(0, '#2f8f5a'); felt.addColorStop(1, '#1d5e3b');
+  ctx.fillStyle = felt; ctx.fillRect(L, Tp, Rt - L, B - Tp);
+  for (const [px, py, pr] of POCKETS) { ctx.fillStyle = '#05070a'; ctx.beginPath(); ctx.arc(px, py, pr, 0, 7); ctx.fill(); }
+  // Slope arrow
+  const m = Math.hypot(tilt.x, tilt.y);
+  if (m > 0.05) {
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(Math.atan2(tilt.y, tilt.x));
+    ctx.globalAlpha = Math.min(0.35, m * 0.4); ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.moveTo(30 + 90 * m, 0); ctx.lineTo(10, -18); ctx.lineTo(10, 18); ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+  for (const b of balls || []) {
+    if (b.n === next) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(b.x, b.y, BALL + 5, 0, 7); ctx.stroke(); }
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.arc(b.x + 3, b.y + 4, BALL, 0, 7); ctx.fill();
+    ctx.fillStyle = b.colour; ctx.beginPath(); ctx.arc(b.x, b.y, BALL, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, 7); ctx.fill();
+    ctx.fillStyle = '#0b0d14'; ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b.n, b.x, b.y + 0.5);
+  }
+  if (aim && !gyro) { ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(aim.x, aim.y, 9, 0, 7); ctx.stroke(); }
+  if (msgT > 0) {
+    ctx.globalAlpha = Math.min(1, msgT); ctx.fillStyle = 'rgba(11,13,20,.72)'; ctx.fillRect(0, H / 2 - 26, W, 52);
+    ctx.fillStyle = '#e9ecf5'; ctx.font = '700 20px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(message, W / 2, H / 2); ctx.globalAlpha = 1;
+  }
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!Award.isOpen()) update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

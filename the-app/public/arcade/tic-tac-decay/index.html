@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tic-Tac-Decay</title>
+<link rel="stylesheet" href="../shared/base.css">
+<style>
+  :root { --accent: #ff6b8b; --x: #ff6b8b; --o: #6ee7ff; }
+  .wrap { max-width: 520px; margin: 0 auto; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 16px; }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+  .seg button {
+    font: inherit; font-size: 13px; font-weight: 600; border: 0; background: transparent; color: var(--muted);
+    padding: 7px 12px; border-radius: 8px; cursor: pointer;
+  }
+  .seg button.on { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+  .score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .side { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+  .side.right { flex-direction: row-reverse; text-align: right; }
+  .side.turn { border-color: var(--c); box-shadow: 0 0 0 1px var(--c); }
+  .side .who { font-size: 13px; color: var(--muted); }
+  .side .pts { font-size: 26px; font-weight: 800; margin-left: auto; }
+  .side.right .pts { margin-left: 0; margin-right: auto; }
+  .side svg { width: 26px; height: 26px; flex: none; }
+  .vs { color: var(--muted); font-size: 12px; text-align: center; }
+
+  .board {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; aspect-ratio: 1;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 10px;
+  }
+  .cell {
+    position: relative; border: 0; border-radius: 14px; background: #10131d; cursor: pointer; padding: 0;
+    display: grid; place-items: center; transition: background .15s;
+  }
+  .cell:hover:not(:disabled) { background: #161b28; }
+  .cell:disabled { cursor: default; }
+  .cell svg { width: 62%; height: 62%; overflow: visible; }
+  .mark { animation: pop .28s cubic-bezier(.2, 1.5, .4, 1); }
+  .mark.doomed { opacity: .32; }
+  .mark.doomed svg { animation: flicker 1.2s ease-in-out infinite; }
+  .ring { position: absolute; inset: 8px; border-radius: 12px; border: 2px dashed transparent; pointer-events: none; }
+  .doomed-ring { border-color: rgba(255, 255, 255, .22); }
+  .ages { position: absolute; bottom: 8px; left: 0; right: 0; display: flex; justify-content: center; gap: 4px; }
+  .ages i { width: 6px; height: 6px; border-radius: 50%; background: #2a3045; }
+  .ages i.on { background: var(--c); }
+  .cell.win { background: color-mix(in srgb, var(--c) 18%, #10131d); }
+  .vanish { position: absolute; inset: 0; display: grid; place-items: center; animation: vanish .45s ease forwards; pointer-events: none; }
+  .vanish svg { width: 62%; height: 62%; }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes vanish { to { transform: scale(1.5) rotate(12deg); opacity: 0; filter: blur(6px); } }
+  @keyframes flicker { 50% { opacity: .45; } }
+
+  .status { text-align: center; margin: 16px 0 4px; font-size: 16px; font-weight: 600; min-height: 24px; }
+  .sub { text-align: center; color: var(--muted); font-size: 13px; min-height: 20px; }
+  .actions { display: flex; justify-content: center; gap: 10px; margin-top: 14px; }
+  .rules { margin-top: 22px; font-size: 13px; color: var(--muted); line-height: 1.7; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+  .rules b { color: var(--text); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="back" href="../index.html">← Arcade</a>
+  <h1><span>✕</span> Tic-Tac-Decay</h1>
+</header>
+<main class="stage">
+  <div class="wrap">
+    <div class="controls">
+      <div class="seg" id="mode">
+        <button data-v="ai" class="on">vs Computer</button>
+        <button data-v="pvp">2 players</button>
+      </div>
+      <div class="seg" id="diff">
+        <button data-v="easy">Easy</button>
+        <button data-v="medium" class="on">Medium</button>
+        <button data-v="hard">Hard</button>
+      </div>
+    </div>
+
+    <div class="score">
+      <div class="side" id="sideX" style="--c: var(--x)"><span id="iconX"></span><span class="who" id="nameX">You</span><span class="pts" id="ptsX">0</span></div>
+      <div class="vs">first to<br><b style="color:var(--text);font-size:16px">3</b></div>
+      <div class="side right" id="sideO" style="--c: var(--o)"><span id="iconO"></span><span class="who" id="nameO">Computer</span><span class="pts" id="ptsO">0</span></div>
+    </div>
+
+    <div class="board" id="board"></div>
+    <div class="status" id="status"></div>
+    <div class="sub" id="sub"></div>
+    <div class="actions"><button class="btn" id="newMatch">New match</button></div>
+
+    <div class="rules">
+      <b>The twist:</b> each player can only have <b>3 marks</b> on the board. When you place a 4th, your oldest mark disappears.
+      The mark that's about to go fades and gets a dashed outline, and the dots under each mark show how long it has left.
+      Get three in a row with the marks you have. Matches are first to 3 wins, and who goes first switches every game.
+    </div>
+  </div>
+</main>
+
+<script src="../shared/award.js"></script>
+<script>
+(() => {
+const ACCENT = '#ff6b8b';
+const GAME = { gameId: 'tic-tac-decay', gameName: 'Tic-Tac-Decay', accent: ACCENT, glyph: '✕' };
+const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const MAX_MOVES = 40; // stop endless shuffles as a draw
+const SVG = {
+  x: '<svg viewBox="0 0 100 100"><path d="M18 18 L82 82 M82 18 L18 82" stroke="var(--x)" stroke-width="13" stroke-linecap="round" fill="none"/></svg>',
+  o: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="33" stroke="var(--o)" stroke-width="13" fill="none"/></svg>',
+};
+
+let mode = 'ai', diff = 'medium';
+let s, score, starter, moves, busy, over, winLine, matchOver, gen = 0;
+
+// ---------- Rules ----------
+function place(st, cell) {
+  const me = st.turn;
+  const q = st[me].slice();
+  q.push(cell);
+  const removed = q.length > 3 ? q.shift() : null;
+  return { x: me === 'x' ? q : st.x, o: me === 'o' ? q : st.o, turn: me === 'x' ? 'o' : 'x', removed };
+}
+const winOf = (q) => q.length === 3 ? LINES.find((l) => l.every((c) => q.includes(c))) || null : null;
+const freeCells = (st) => [0,1,2,3,4,5,6,7,8].filter((c) => !st.x.includes(c) && !st.o.includes(c));
+
+// ---------- AI (negamax with memo) ----------
+const memo = new Map();
+function lineScore(st, me) {
+  // Lines where I have 2 and they have none, minus the reverse. Ignores the mark that's about to fade.
+  const opp = me === 'x' ? 'o' : 'x';
+  const mine = st[me].length === 3 ? st[me].slice(1) : st[me];
+  const theirs = st[opp].length === 3 ? st[opp].slice(1) : st[opp];
+  let v = 0;
+  for (const l of LINES) {
+    const a = l.filter((c) => mine.includes(c)).length, b = l.filter((c) => theirs.includes(c)).length;
+    if (a === 2 && b === 0) v += 3; else if (a === 1 && b === 0) v += 1;
+    if (b === 2 && a === 0) v -= 3; else if (b === 1 && a === 0) v -= 1;
+  }
+  return v;
+}
+function negamax(st, depth) {
+  const key = st.x.join('') + '|' + st.o.join('') + '|' + st.turn + '|' + depth;
+  if (memo.has(key)) return memo.get(key);
+  const me = st.turn;
+  let best = -Infinity;
+  for (const c of freeCells(st)) {
+    const ns = place(st, c);
+    let v;
+    if (winOf(ns[me])) v = 1000 + depth;
+    else if (depth === 0) v = lineScore(ns, me);
+    else v = -negamax(ns, depth - 1);
+    if (v > best) best = v;
+  }
+  memo.set(key, best);
+  return best;
+}
+function aiMove(st) {
+  const cfg = { easy: { depth: 1, noise: 0.45 }, medium: { depth: 3, noise: 0.12 }, hard: { depth: 7, noise: 0 } }[diff];
+  const cells = freeCells(st);
+  if (Math.random() < cfg.noise) return cells[Math.floor(Math.random() * cells.length)];
+  if (memo.size > 400000) memo.clear();
+  let best = -Infinity, choices = [];
+  for (const c of cells) {
+    const ns = place(st, c);
+    const v = winOf(ns[st.turn]) ? 1000 + cfg.depth + 1 : -negamax(ns, cfg.depth - 1);
+    if (v > best) { best = v; choices = [c]; } else if (v === best) choices.push(c);
+  }
+  return choices[Math.floor(Math.random() * choices.length)];
+}
+
+// ---------- Flow ----------
+function newMatch() {
+  score = { x: 0, o: 0 };
+  starter = 'x';
+  matchOver = false;
+  newGame();
+}
+function newGame() {
+  gen++;
+  s = { x: [], o: [], turn: starter };
+  moves = 0; over = false; winLine = null; busy = false;
+  render();
+  maybeAI();
+}
+function isAI(p) { return mode === 'ai' && p === 'o'; }
+
+function play(cell) {
+  if (busy) return;
+  // Rounds wait for the player: tapping the board after a game starts the next one.
+  if (over) { if (matchOver) newMatch(); else newGame(); return; }
+  const me = s.turn;
+  const ns = place(s, cell);
+  s = { x: ns.x, o: ns.o, turn: ns.turn };
+  moves++;
+  render(cell, ns.removed, me);
+  const line = winOf(s[me]);
+  if (line) return endGame(me, line);
+  if (moves >= MAX_MOVES) return endGame(null);
+  maybeAI();
+}
+
+function maybeAI() {
+  if (over || !isAI(s.turn)) return;
+  busy = true;
+  setStatus('Computer is thinking…');
+  const g = gen;
+  setTimeout(() => {
+    if (g !== gen) return;
+    const c = aiMove(s);
+    busy = false;
+    play(c);
+  }, 380 + Math.random() * 260);
+}
+
+function endGame(winner, line) {
+  over = true; winLine = line || null;
+  if (winner) score[winner]++;
+  starter = starter === 'x' ? 'o' : 'x';
+  render();
+  const name = (p) => mode === 'ai' ? (p === 'x' ? 'You' : 'The computer') : (p === 'x' ? 'X' : 'O');
+  if (winner && score[winner] >= 3) {
+    matchOver = true;
+    setStatus(winner === 'x' && mode === 'ai' ? 'You won the match!' : `${name(winner)} won the match.`, `Final score ${score.x}–${score.o}. Tap the board for a new match.`);
+    if (mode === 'ai' && winner === 'x') awardFor();
+    return;
+  }
+  setStatus(winner ? `${name(winner)} took the game.` : 'Draw. The marks kept fading.', 'Tap the board when you\'re ready for the next game.');
+}
+
+function awardFor() {
+  const T = {
+    easy: { tier: 'bronze', title: 'Fading Fast', line: 'Beat the computer on Easy.' },
+    medium: { tier: 'silver', title: 'Tactical Decay', line: 'Beat the computer on Medium.' },
+    hard: { tier: 'gold', title: 'Entropy Master', line: 'Beat the computer on Hard.' },
+  }[diff];
+  setTimeout(() => Award.unlock({
+    ...GAME, ...T,
+    stats: [['Match', `${score.x}–${score.o}`], ['Difficulty', diff[0].toUpperCase() + diff.slice(1)], ['Moves last game', moves]],
+    onClose: newMatch,
+  }), 700);
+}
+
+// ---------- Render ----------
+const board = document.getElementById('board');
+const cells = [];
+for (let i = 0; i < 9; i++) {
+  const b = document.createElement('button');
+  b.className = 'cell';
+  b.setAttribute('aria-label', 'Cell ' + (i + 1));
+  b.onclick = () => { if (!isAI(s.turn)) play(i); };
+  board.appendChild(b); cells.push(b);
+}
+
+function render(placed, removed, mover) {
+  const doomedFor = s.turn; // the player to move will lose their oldest mark if they have 3
+  for (let i = 0; i < 9; i++) {
+    const el = cells[i];
+    const p = s.x.includes(i) ? 'x' : s.o.includes(i) ? 'o' : null;
+    const q = p ? s[p] : null;
+    const idx = q ? q.indexOf(i) : -1;
+    const doomed = p && p === doomedFor && q.length === 3 && idx === 0 && !over;
+    el.style.setProperty('--c', p ? `var(--${p})` : 'transparent');
+    el.disabled = !over && (!!p || busy || isAI(s.turn)); // after a game, any cell starts the next
+    el.classList.toggle('win', !!(winLine && winLine.includes(i)));
+    const ages = p ? `<div class="ages">${[0,1,2].map((k) => `<i class="${k < 3 - (q.length - 1 - idx) ? 'on' : ''}"></i>`).join('')}</div>` : '';
+    const keepAnim = p && i !== placed ? ' style="animation:none"' : '';
+    el.innerHTML = p
+      ? `<div class="ring ${doomed ? 'doomed-ring' : ''}"></div><div class="mark ${doomed ? 'doomed' : ''}"${keepAnim}>${SVG[p]}</div>${ages}`
+      : '';
+    if (removed === i && mover) {
+      const v = document.createElement('div');
+      v.className = 'vanish'; v.innerHTML = SVG[mover];
+      el.appendChild(v);
+      setTimeout(() => v.remove(), 500);
+    }
+  }
+  document.getElementById('ptsX').textContent = score.x;
+  document.getElementById('ptsO').textContent = score.o;
+  document.getElementById('sideX').classList.toggle('turn', !over && s.turn === 'x');
+  document.getElementById('sideO').classList.toggle('turn', !over && s.turn === 'o');
+  document.getElementById('nameX').textContent = mode === 'ai' ? 'You' : 'Player X';
+  document.getElementById('nameO').textContent = mode === 'ai' ? `Computer · ${diff}` : 'Player O';
+  if (!over && !busy) {
+    const who = mode === 'ai' ? (s.turn === 'x' ? 'Your move' : 'Computer') : `${s.turn.toUpperCase()} to move`;
+    const fading = s[s.turn].length === 3 ? 'Your next mark erases the faded one.' : `${3 - s[s.turn].length} more before marks start fading.`;
+    setStatus(who, mode === 'ai' && s.turn === 'o' ? '' : fading);
+  }
+}
+function setStatus(a, b) {
+  document.getElementById('status').textContent = a;
+  if (b !== undefined) document.getElementById('sub').textContent = b;
+}
+
+document.getElementById('iconX').innerHTML = SVG.x;
+document.getElementById('iconO').innerHTML = SVG.o;
+
+function seg(id, cb) {
+  const el = document.getElementById(id);
+  el.querySelectorAll('button').forEach((b) => b.onclick = () => {
+    el.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    cb(b.dataset.v);
+  });
+}
+seg('mode', (v) => { mode = v; document.getElementById('diff').style.visibility = v === 'ai' ? 'visible' : 'hidden'; newMatch(); });
+seg('diff', (v) => { diff = v; newMatch(); });
+document.getElementById('newMatch').onclick = newMatch;
+
+newMatch();
+})();
+</script>
+</body>
+</html>

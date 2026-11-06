@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gravity Typist</title>
+<link rel="stylesheet" href="../shared/base.css">
+<style>
+  :root { --accent: #ffd166; }
+  .frame { position: relative; }
+  .panel {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(5, 8, 16, .78); border-radius: var(--radius); backdrop-filter: blur(3px); text-align: center;
+  }
+  .panel[hidden] { display: none; }
+  .panel .box { padding: 24px; max-width: 440px; }
+  .panel h2 { margin: 0 0 8px; font-size: 30px; }
+  .panel p { color: var(--muted); margin: 0 0 18px; line-height: 1.6; }
+  .typebar { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
+  .typebar input {
+    flex: 1; font: inherit; font-size: 22px; font-weight: 600; letter-spacing: .04em; color: var(--text);
+    background: var(--panel); border: 2px solid var(--line); border-radius: 12px; padding: 12px 16px; outline: none;
+  }
+  .typebar input:focus { border-color: var(--accent); }
+  .typebar input.shake { animation: shake .25s; border-color: #ff5d73; }
+  @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+  @media (prefers-reduced-motion: reduce) { .typebar input.shake { animation: none; } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="back" href="../index.html">← Arcade</a>
+  <h1><span>Aa</span> Gravity Typist</h1>
+  <div class="spacer"></div>
+  <div class="hud">
+    <span class="pill">Words <b id="hWords">0</b></span>
+    <span class="pill">Level <b id="hLevel">1</b></span>
+    <span class="pill">Accuracy <b id="hAcc">100%</b></span>
+  </div>
+</header>
+<main class="stage">
+  <div class="frame">
+    <canvas id="c" class="game" width="960" height="560" aria-label="Falling words. Type a word to clear it."></canvas>
+    <div class="panel" id="panel"><div class="box">
+      <h2 id="pTitle">Gravity Typist</h2>
+      <p id="pText">Words drift down and pile up. Type one to clear it away. Typos drop a stone on the pile; long words (7+ letters) knock their neighbours off. Keep the pile below the line.</p>
+      <button class="btn primary" id="pBtn">Start typing</button>
+    </div></div>
+  </div>
+  <div class="typebar">
+    <input id="type" type="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done" aria-label="Type a falling word" placeholder="Type a word…">
+  </div>
+  <div class="help">Type any word on screen; you don't need to press Enter. <kbd>Esc</kbd> clears what you've typed. Each typo drops a stone; clear a long word next to stones to knock them off.</div>
+</main>
+
+<script src="../shared/award.js"></script>
+<script>
+(() => {
+const W = 960, H = 560, FLOOR = H - 10, DANGER = 74, BLOCK_H = 40;
+const GAME = { gameId: 'gravity-typist', gameName: 'Gravity Typist', accent: '#ffd166', glyph: 'Aa' };
+const WORDS = ('sun rain leaf wave cloud stone river ocean forest window pencil garden coffee travel morning silence island planet rocket breeze ' +
+  'lantern meadow harbor compass journey whisper sunset canyon glacier volcano village bridge market castle feather thunder rainbow ' +
+  'pebble orbit comet nebula galaxy puzzle marble mirror candle blanket pillow kettle teacup biscuit saffron pepper cinnamon lemon olive ' +
+  'violin guitar melody rhythm echo chorus ballad lyric poem story novel chapter letter stamp postcard ticket luggage passport station ' +
+  'tram ferry glider kite balloon lighthouse anchor sail paddle canoe camera sketch canvas palette crayon ink brush easel museum statue ' +
+  'pyramid temple palace tower dome arch maze riddle clue secret lantern firefly owl fox otter heron falcon dolphin turtle penguin koala ' +
+  'bamboo cactus orchid tulip daisy clover acorn maple willow cedar pine moss fern frost snow ice storm drizzle mist fog dawn dusk noon ' +
+  'midnight weekend holiday picnic festival parade carnival circus juggler magician wizard dragon unicorn giant pirate treasure voyage ' +
+  'astronaut telescope microscope keyboard monitor gravity balance tumble wobble stack topple domino ladder elevator').split(' ');
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const input = document.getElementById('type');
+let blocks, parts, words, keys, typos, level, spawnT, state = 'menu', nextId = 1, milestones;
+const COLOURS = ['#ffd166', '#7cc8ff', '#a7f3d0', '#fca5a5', '#c4b5fd', '#fdba74'];
+
+function reset() {
+  blocks = []; parts = []; words = 0; keys = 0; typos = 0; level = 1; spawnT = 0.4; milestones = {};
+  input.value = ''; hud();
+}
+function hud() {
+  document.getElementById('hWords').textContent = words;
+  document.getElementById('hLevel').textContent = level;
+  document.getElementById('hAcc').textContent = (keys ? Math.round(100 * (keys - typos) / keys) : 100) + '%';
+}
+const speed = () => 34 + level * 9;              // falling speed of new words, px/s
+const interval = () => Math.max(1.05, 2.6 - level * 0.18);
+
+ctx.font = '600 19px system-ui, sans-serif';
+function spawnWord() {
+  const onScreen = new Set(blocks.filter(b => b.kind === 'word').map(b => b.word));
+  const pool = WORDS.filter(w => !onScreen.has(w) && w.length <= 4 + level * 2);
+  const word = pool[Math.floor(Math.random() * pool.length)] || 'pause';
+  ctx.font = '600 19px system-ui, sans-serif';
+  const w = Math.ceil(ctx.measureText(word).width) + 30;
+  let x, tries = 0;
+  do { x = 12 + Math.random() * (W - w - 24); tries++; }
+  while (tries < 20 && blocks.some(b => b.y < 120 && x < b.x + b.w + 8 && x + w + 8 > b.x));
+  blocks.push({ id: nextId++, kind: 'word', word, x, y: -BLOCK_H, w, h: BLOCK_H, settled: false, colour: COLOURS[nextId % COLOURS.length] });
+}
+function dropStone() {
+  const s = 30; const x = 12 + Math.random() * (W - s - 24);
+  blocks.push({ id: nextId++, kind: 'stone', x, y: -s, w: s, h: s, settled: false });
+}
+
+// Each block falls until it rests on the floor or on any block below it.
+function settle(dt) {
+  blocks.sort((a, b) => (b.y + b.h) - (a.y + a.h));
+  for (const b of blocks) {
+    let rest = FLOOR;
+    for (const o of blocks) {
+      if (o === b || o.y < b.y + b.h - 0.5) continue;
+      if (b.x < o.x + o.w - 2 && b.x + b.w > o.x + 2) rest = Math.min(rest, o.y);
+    }
+    const bottom = b.y + b.h;
+    if (bottom < rest - 0.5) {
+      const v = b.settled ? 420 : (b.kind === 'stone' ? 380 : speed());
+      b.y = Math.min(rest - b.h, b.y + v * dt);
+      if (b.settled && b.y + b.h < rest - 0.5) b.dropping = true;
+    } else {
+      b.y = rest - b.h; b.settled = true; b.dropping = false;
+    }
+  }
+}
+
+function burst(b, colour) {
+  for (let i = 0; i < 18; i++) parts.push({ x: b.x + Math.random() * b.w, y: b.y + Math.random() * b.h, vx: (Math.random() - .5) * 240, vy: -60 - Math.random() * 180, life: 1, colour });
+}
+function topple(b) {
+  parts.push({ block: { ...b }, vx: b.x < W / 2 ? -160 : 160, vy: -120, rot: 0, vr: (b.x < W / 2 ? -1 : 1) * 4, life: 1.2 });
+}
+
+function clearWord(target) {
+  blocks = blocks.filter(b => b !== target);
+  burst(target, target.colour);
+  words++;
+  // Long words knock over whatever touches them on either side.
+  if (target.word.length >= 7) {
+    const hits = blocks.filter(o => o.y < target.y + target.h - 4 && o.y + o.h > target.y + 4 &&
+      (Math.abs(o.x - (target.x + target.w)) < 12 || Math.abs(o.x + o.w - target.x) < 12));
+    hits.forEach(topple);
+    blocks = blocks.filter(o => !hits.includes(o));
+    words += hits.filter(o => o.kind === 'word').length;
+  }
+  if (words >= level * 8) level++;
+  hud();
+  checkAwards();
+}
+
+function onType() {
+  if (state !== 'play') return;
+  const raw = input.value.toLowerCase().replace(/[^a-z]/g, '');
+  if (raw.length > (input.dataset.len || 0)) keys += raw.length - (input.dataset.len || 0);
+  const candidates = blocks.filter(b => b.kind === 'word' && b.word.startsWith(raw));
+  if (raw && !candidates.length) {
+    typos++; dropStone();
+    input.classList.remove('shake'); void input.offsetWidth; input.classList.add('shake');
+    input.value = raw.slice(0, -1);
+  } else {
+    input.value = raw;
+    const exact = candidates.filter(b => b.word === raw).sort((a, b) => b.y - a.y)[0];
+    if (exact) { clearWord(exact); input.value = ''; }
+  }
+  input.dataset.len = input.value.length;
+  hud();
+}
+input.addEventListener('input', onType);
+input.addEventListener('animationend', () => input.classList.remove('shake'));
+input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { input.value = ''; input.dataset.len = 0; } });
+
+function checkAwards() {
+  const acc = keys ? Math.round(100 * (keys - typos) / keys) : 100;
+  const stats = [['Words', words], ['Accuracy', acc + '%'], ['Level', level]];
+  const tiers = [[120, 'gold', 'Weightless', 'Cleared 120 falling words in one run.'], [60, 'silver', 'Gravity Defier', 'Cleared 60 falling words in one run.'], [25, 'bronze', 'Quick Fingers', 'Cleared 25 falling words in one run.']];
+  for (const [n, tier, title, line] of tiers) {
+    if (words >= n && !milestones[tier]) {
+      milestones[tier] = true;
+      Award.unlock({ ...GAME, tier, title, line, stats, onClose: () => input.focus() });
+      break;
+    }
+  }
+}
+
+function gameOver() {
+  state = 'over';
+  const acc = keys ? Math.round(100 * (keys - typos) / keys) : 100;
+  showPanel('The pile reached the line', `You cleared ${words} word${words === 1 ? '' : 's'} and got to level ${level}. Nicely typed.`, 'Play again');
+}
+function showPanel(title, text, btn) {
+  document.getElementById('pTitle').textContent = title;
+  document.getElementById('pText').textContent = text;
+  document.getElementById('pBtn').textContent = btn;
+  document.getElementById('panel').hidden = false;
+  document.getElementById('pBtn').focus();
+}
+document.getElementById('pBtn').onclick = () => {
+  reset(); state = 'play'; document.getElementById('panel').hidden = true; input.focus();
+};
+
+// ---------- Loop ----------
+function update(dt) {
+  if (state !== 'play') return;
+  spawnT -= dt;
+  if (spawnT <= 0) { spawnWord(); spawnT = interval(); }
+  settle(dt);
+  if (blocks.some(b => b.settled && b.y < DANGER)) gameOver();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function drawBlock(b) {
+  if (b.kind === 'stone') {
+    ctx.fillStyle = '#4b5163'; roundRect(b.x, b.y, b.w, b.h, 8); ctx.fill();
+    ctx.fillStyle = '#6b7286'; ctx.fillRect(b.x + 7, b.y + 8, 6, 4); ctx.fillRect(b.x + 16, b.y + 17, 7, 4);
+    return;
+  }
+  const typed = input.value && b.word.startsWith(input.value) ? input.value.length : 0;
+  ctx.fillStyle = b.colour; roundRect(b.x, b.y, b.w, b.h, 10); ctx.fill();
+  if (typed) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.stroke(); }
+  ctx.font = '600 19px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  const tx = b.x + 15, ty = b.y + b.h / 2 + 1;
+  ctx.fillStyle = '#5a4a12';
+  if (typed) { ctx.fillStyle = '#0b0d14'; ctx.fillText(b.word.slice(0, typed), tx, ty); }
+  ctx.fillStyle = typed ? 'rgba(11,13,20,.5)' : '#1b1f2b';
+  ctx.fillText(b.word.slice(typed), tx + ctx.measureText(b.word.slice(0, typed)).width, ty);
+}
+
+function draw() {
+  ctx.fillStyle = '#0b0d14'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(255,93,115,.55)'; ctx.setLineDash([8, 8]); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, DANGER); ctx.lineTo(W, DANGER); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255,93,115,.75)'; ctx.font = '600 12px system-ui'; ctx.textAlign = 'right'; ctx.fillText('keep the stack below this line', W - 12, DANGER - 8);
+  ctx.fillStyle = '#1b2030'; ctx.fillRect(0, FLOOR, W, H - FLOOR);
+  blocks.forEach(drawBlock);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.life -= 1 / 60;
+    if (p.life <= 0) { parts.splice(i, 1); continue; }
+    if (p.block) {
+      p.block.x += p.vx / 60; p.block.y += p.vy / 60; p.vy += 12; p.rot += p.vr / 60;
+      ctx.save(); ctx.globalAlpha = Math.min(1, p.life);
+      ctx.translate(p.block.x + p.block.w / 2, p.block.y + p.block.h / 2); ctx.rotate(p.rot);
+      ctx.translate(-p.block.x - p.block.w / 2, -p.block.y - p.block.h / 2); drawBlock(p.block); ctx.restore();
+    } else {
+      p.x += p.vx / 60; p.y += p.vy / 60; p.vy += 9;
+      ctx.globalAlpha = p.life; ctx.fillStyle = p.colour; ctx.fillRect(p.x, p.y, 5, 5); ctx.globalAlpha = 1;
+    }
+  }
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!Award.isOpen()) update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+reset();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

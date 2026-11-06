@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mouse-Shy Maze</title>
+<link rel="stylesheet" href="../shared/base.css">
+<style>
+  :root { --accent: #ff9f6b; }
+  .frame { position: relative; }
+  canvas.game { cursor: none; }
+  .panel {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(5, 8, 16, .78); border-radius: var(--radius); backdrop-filter: blur(3px); text-align: center;
+  }
+  .panel[hidden] { display: none; }
+  .panel .box { padding: 24px; max-width: 460px; }
+  .panel h2 { margin: 0 0 8px; font-size: 30px; }
+  .panel p { color: var(--muted); margin: 0 0 18px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="back" href="../index.html">← Arcade</a>
+  <h1><span>⌖</span> Mouse-Shy Maze</h1>
+  <div class="spacer"></div>
+  <div class="hud">
+    <span class="pill">Level <b id="hLevel">1</b>/5</span>
+    <span class="pill">Bumps <b id="hBumps">0</b></span>
+  </div>
+</header>
+<main class="stage">
+  <div class="frame">
+    <canvas id="c" class="game" width="960" height="600" aria-label="Mouse-Shy Maze. Hover to guide the glow; the walls move away from your pointer."></canvas>
+    <div class="panel" id="panel"><div class="box">
+      <h2 id="pTitle">Mouse-Shy Maze</h2>
+      <p id="pText">Hover over the glow to pick it up, then guide it to the green exit, no clicking. The walls shy away from your pointer and the doors slide open in their own time. Go slowly: there's no clock.</p>
+      <button class="btn primary" id="pBtn">Begin</button>
+    </div></div>
+  </div>
+  <div class="help">Mouse: just hover. Touch: drag with one finger, starting on the glow. Bumps are counted, not punished: slow and steady wins gold.
+  This game needs a pointer; there is no keyboard version.</div>
+</main>
+
+<script src="../shared/award.js"></script>
+<script>
+(() => {
+const W = 960, H = 600, T = 10, R = 120, GLOW_R = 11, HOLD = 48, LOSE = 80, SPEED = 260;
+const LEVELS = [[5, 3], [6, 4], [7, 4], [8, 5], [9, 5]];
+const GAME = { gameId: 'mouse-shy-maze', gameName: 'Mouse-Shy Maze', accent: '#ff9f6b', glyph: '⌖' };
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+
+let level, walls, glow, exit, start, pointer, holding, time, totalTime, bumps, totalBumps, bumpT, state = 'menu', hint, cell;
+
+// ---------- Maze ----------
+function buildLevel(n) {
+  const [cols, rows] = LEVELS[n];
+  cell = Math.floor(Math.min((W - 60) / cols, (H - 60) / rows));
+  const ox = Math.floor((W - cols * cell) / 2), oy = Math.floor((H - rows * cell) / 2);
+  const open = new Set();                          // carved passages "c,r|c,r"
+  const seen = new Set(['0,0']), stack = [[0, 0]];
+  while (stack.length) {
+    const [c, r] = stack[stack.length - 1];
+    const next = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dc, dr]) => [c + dc, r + dr])
+      .filter(([nc, nr]) => nc >= 0 && nr >= 0 && nc < cols && nr < rows && !seen.has(nc + ',' + nr));
+    if (!next.length) { stack.pop(); continue; }
+    const [nc, nr] = next[Math.floor(Math.random() * next.length)];
+    open.add([c, r, nc, nr].join()); open.add([nc, nr, c, r].join());
+    seen.add(nc + ',' + nr); stack.push([nc, nr]);
+  }
+  walls = [];
+  const add = (x, y, w, h, axis, door) => walls.push({ hx: x, hy: y, w, h, axis, door, dx: 0, dy: 0 });
+  for (let r = 0; r <= rows; r++) for (let c = 0; c < cols; c++) {   // horizontal walls
+    const x = ox + c * cell - T / 2, y = oy + r * cell - T / 2;
+    const passage = r > 0 && r < rows && open.has([c, r - 1, c, r].join());
+    if (!passage) add(x, y, cell + T, T, 'h', false);
+    else if (Math.random() < 0.38 && !(c === 0 && r === 1)) add(x + T, y, cell - T, T, 'h', true);
+  }
+  for (let c = 0; c <= cols; c++) for (let r = 0; r < rows; r++) {   // vertical walls
+    const x = ox + c * cell - T / 2, y = oy + r * cell - T / 2;
+    const passage = c > 0 && c < cols && open.has([c - 1, r, c, r].join());
+    if (!passage) add(x, y, T, cell + T, 'v', false);
+    else if (Math.random() < 0.38 && !(c === 1 && r === 0)) add(x, y + T, T, cell - T, 'v', true);
+  }
+  start = { x: ox + cell / 2, y: oy + cell / 2 };
+  exit = { x: ox + (cols - 0.5) * cell, y: oy + (rows - 0.5) * cell, r: Math.min(22, cell * 0.25) };
+  glow = { x: start.x, y: start.y };
+  holding = false; time = 0; bumps = 0; bumpT = 0;
+  hint = 'Hover over the glow to pick it up.';
+}
+
+const rectOf = (w) => ({ x: w.hx + w.dx, y: w.hy + w.dy, w: w.w, h: w.h });
+function nearest(px, py, r) {
+  return { x: Math.max(r.x, Math.min(px, r.x + r.w)), y: Math.max(r.y, Math.min(py, r.y + r.h)) };
+}
+
+// Walls flee the pointer: plain walls sidestep a little, doors slide fully open.
+// Both move at a limited speed, which is the whole game.
+function moveWalls(dt) {
+  for (const w of walls) {
+    let tx = 0, ty = 0;
+    if (pointer) {
+      const home = { x: w.hx, y: w.hy, w: w.w, h: w.h };
+      const n = nearest(pointer.x, pointer.y, home);
+      const d = Math.hypot(pointer.x - n.x, pointer.y - n.y);
+      if (d < R) {
+        const s = 1 - d / R;
+        if (w.door) {
+          const amount = Math.min(1, s * 1.7) * (w.axis === 'h' ? w.w : w.h);
+          const centre = w.axis === 'h' ? w.hx + w.w / 2 : w.hy + w.h / 2;
+          const sign = (w.axis === 'h' ? pointer.x : pointer.y) < centre ? 1 : -1;
+          if (w.axis === 'h') tx = sign * amount; else ty = sign * amount;
+        } else {
+          const amount = 14 * s;
+          if (w.axis === 'h') ty = (pointer.y < w.hy + w.h / 2 ? 1 : -1) * amount;
+          else tx = (pointer.x < w.hx + w.w / 2 ? 1 : -1) * amount;
+        }
+      }
+    }
+    const max = (w.door ? 150 : 90) * dt;
+    w.dx += Math.max(-max, Math.min(max, tx - w.dx));
+    w.dy += Math.max(-max, Math.min(max, ty - w.dy));
+  }
+}
+
+function collide(moved) {
+  let hit = false;
+  for (const w of walls) {
+    const r = rectOf(w), n = nearest(glow.x, glow.y, r);
+    const dx = glow.x - n.x, dy = glow.y - n.y, d = Math.hypot(dx, dy);
+    if (d < GLOW_R) {
+      hit = true;
+      if (d > 0.001) { glow.x = n.x + (dx / d) * GLOW_R; glow.y = n.y + (dy / d) * GLOW_R; }
+      else { glow.y += w.axis === 'h' ? (glow.y < r.y + r.h / 2 ? -GLOW_R : GLOW_R) : 0; glow.x += w.axis === 'v' ? (glow.x < r.x + r.w / 2 ? -GLOW_R : GLOW_R) : 0; }
+    }
+  }
+  if (hit && moved && bumpT <= 0) { bumps++; totalBumps++; bumpT = 0.45; shake = 0.25; }
+}
+
+// ---------- Update ----------
+let shake = 0;
+function update(dt) {
+  if (state !== 'play') return;
+  time += dt; bumpT -= dt; shake = Math.max(0, shake - dt);
+  moveWalls(dt);
+  let moved = false;
+  if (pointer) {
+    const d = Math.hypot(pointer.x - glow.x, pointer.y - glow.y);
+    if (!holding && d < HOLD) { holding = true; hint = ''; }
+    if (holding && d > LOSE) { holding = false; hint = 'Too fast: come back to the glow.'; }
+    if (holding && d > 0.5) {
+      const step = Math.min(d, SPEED * dt);
+      glow.x += ((pointer.x - glow.x) / d) * step; glow.y += ((pointer.y - glow.y) / d) * step; moved = true;
+    }
+  }
+  collide(moved);
+  if (Math.hypot(glow.x - exit.x, glow.y - exit.y) < exit.r) levelDone();
+  hud();
+}
+function hud() {
+  document.getElementById('hLevel').textContent = level + 1;
+  document.getElementById('hBumps').textContent = totalBumps;
+}
+
+function levelDone() {
+  totalTime += time; state = 'pause';
+  checkAwards();
+  if (level + 1 >= LEVELS.length) {
+    showPanel('Out of the maze.', `All five mazes, with ${totalBumps} bump${totalBumps === 1 ? '' : 's'} along the way.`, 'Play again', () => newRun());
+  } else {
+    showPanel(`Level ${level + 1} cleared`, `${bumps} bump${bumps === 1 ? '' : 's'}. The next maze is bigger, with more doors.`, 'Next maze', () => { level++; buildLevel(level); state = 'play'; });
+  }
+}
+let awarded = {};
+function checkAwards() {
+  const cleared = level + 1;
+  const stats = [['Levels', `${cleared} / 5`], ['Bumps', totalBumps]];
+  if (cleared === 5 && totalBumps <= 5 && !awarded.gold) { awarded.gold = true; return Award.unlock({ ...GAME, tier: 'gold', title: 'Feather Touch', line: 'Crossed all five shy mazes with five bumps or fewer.', stats }); }
+  if (cleared === 5 && !awarded.silver) { awarded.silver = true; return Award.unlock({ ...GAME, tier: 'silver', title: 'Maze Whisperer', line: 'Hovered a path through all five shy mazes.', stats }); }
+  if (cleared === 2 && !awarded.bronze) { awarded.bronze = true; return Award.unlock({ ...GAME, tier: 'bronze', title: 'Gentle Guide', line: 'Coaxed the walls apart in two shy mazes.', stats }); }
+}
+function newRun() { level = 0; totalTime = 0; totalBumps = 0; awarded = {}; buildLevel(0); state = 'play'; }
+
+function showPanel(title, text, btn, fn) {
+  document.getElementById('pTitle').textContent = title;
+  document.getElementById('pText').textContent = text;
+  const b = document.getElementById('pBtn'); b.textContent = btn;
+  b.onclick = () => { document.getElementById('panel').hidden = true; fn(); };
+  document.getElementById('panel').hidden = false; b.focus();
+}
+document.getElementById('pBtn').onclick = () => { document.getElementById('panel').hidden = true; newRun(); };
+
+// Pointer in canvas coordinates. For touch, only while the finger is down.
+function toCanvas(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) }; }
+cv.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' || e.buttons) pointer = toCanvas(e); });
+cv.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') { cv.setPointerCapture(e.pointerId); pointer = toCanvas(e); } });
+cv.addEventListener('pointerup', (e) => { if (e.pointerType !== 'mouse') pointer = null; });
+cv.addEventListener('pointerleave', () => { pointer = null; });
+
+// ---------- Draw ----------
+function draw(now) {
+  ctx.save();
+  ctx.fillStyle = '#120d0b'; ctx.fillRect(0, 0, W, H);
+  if (shake > 0) ctx.translate((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
+  if (!walls) { ctx.restore(); return; }
+  // Exit
+  const pulse = 0.6 + 0.4 * Math.sin(now / 300);
+  ctx.fillStyle = `rgba(124,255,178,${0.15 + 0.15 * pulse})`; ctx.beginPath(); ctx.arc(exit.x, exit.y, exit.r + 8, 0, 7); ctx.fill();
+  ctx.fillStyle = '#7cffb2'; ctx.beginPath(); ctx.arc(exit.x, exit.y, exit.r * 0.55, 0, 7); ctx.fill();
+  // Walls
+  for (const w of walls) {
+    const r = rectOf(w);
+    ctx.fillStyle = w.door ? '#ffd166' : '#ff9f6b';
+    ctx.globalAlpha = w.door ? 0.95 : 0.9;
+    ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 4); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // Pointer halo: shows the reach of your "shyness field".
+  if (pointer) {
+    ctx.strokeStyle = 'rgba(255,159,107,.25)'; ctx.setLineDash([4, 6]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(pointer.x, pointer.y, R, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(pointer.x, pointer.y, 3, 0, 7); ctx.fill();
+  }
+  // Glow
+  const g = ctx.createRadialGradient(glow.x, glow.y, 0, glow.x, glow.y, GLOW_R * 3);
+  g.addColorStop(0, holding ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.6)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(glow.x, glow.y, GLOW_R * 3, 0, 7); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(glow.x, glow.y, GLOW_R * (holding ? 1 : 0.8 + 0.15 * pulse), 0, 7); ctx.fill();
+  ctx.restore();
+  if (hint && state === 'play') {
+    ctx.fillStyle = 'rgba(18,13,11,.8)'; ctx.fillRect(0, H - 40, W, 40);
+    ctx.fillStyle = '#ffd166'; ctx.font = '600 16px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(hint, W / 2, H - 20);
+  }
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!Award.isOpen()) update(dt);
+  draw(now);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

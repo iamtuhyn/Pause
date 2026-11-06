@@ -1,0 +1,143 @@
+:root {
+  --bg: #0b0d14;
+  --panel: #141824;
+  --panel-2: #1b2030;
+  --line: #262c3d;
+  --text: #e9ecf5;
+  --muted: #8d94a8;
+  --accent: #7cc8ff;
+  --radius: 14px;
+  --font: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  max-width: 1000px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+.topbar h1 {
+  font-size: 20px;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+.topbar h1 span { color: var(--accent); }
+.topbar .spacer { flex: 1; }
+.back {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.back:hover { color: var(--text); border-color: var(--muted); }
+.embedded .back { display: none; }
+
+.stage {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 16px 32px;
+}
+canvas.game {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  background: #000;
+  touch-action: none;
+}
+
+.hud {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.pill {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+  white-space: nowrap;
+}
+.pill b { color: var(--text); font-weight: 600; }
+
+.help {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+kbd {
+  font-family: inherit;
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  padding: 1px 6px;
+  color: var(--text);
+}
+
+.btn {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 16px;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b0d14;
+}
+.btn:disabled { opacity: 0.4; cursor: default; }
+
+/* On-screen controls, only on touch devices */
+.touch { display: none; }
+@media (pointer: coarse) {
+  .touch {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 12px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .touch .group { display: flex; gap: 10px; }
+  .touch button {
+    width: 64px;
+    height: 64px;
+    font-size: 22px;
+    border-radius: 16px;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    touch-action: none;
+  }
+  .touch button.on { background: var(--accent); color: #0b0d14; }
+}

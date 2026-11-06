@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reverse Snake</title>
+<link rel="stylesheet" href="../shared/base.css">
+<style>
+  :root { --accent: #7cffb2; }
+  .frame { position: relative; }
+  .panel {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(5, 8, 16, .78); border-radius: var(--radius); backdrop-filter: blur(3px); text-align: center;
+  }
+  .panel[hidden] { display: none; }
+  .panel .box { padding: 24px; max-width: 460px; }
+  .panel h2 { margin: 0 0 8px; font-size: 30px; }
+  .panel p { color: var(--muted); margin: 0 0 18px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="back" href="../index.html">← Arcade</a>
+  <h1><span>●</span> Reverse Snake</h1>
+  <div class="spacer"></div>
+  <div class="hud">
+    <span class="pill">Round <b id="hRound">1</b>/5</span>
+    <span class="pill">Survive <b id="hTime">25</b>s</span>
+    <span class="pill">Crashes <b id="hCrash">0</b></span>
+    <span class="pill">Lives <b id="hLives">♥♥♥</b></span>
+  </div>
+</header>
+<main class="stage">
+  <div class="frame">
+    <canvas id="c" class="game" width="960" height="600" aria-label="Reverse Snake playing field"></canvas>
+    <div class="panel" id="panel"><div class="box">
+      <h2 id="pTitle">You are the apple.</h2>
+      <p id="pText">A hungry snake is after you, and it learns a little each round. Stay out of reach for 25 seconds, or lead it into tying itself in knots.</p>
+      <button class="btn primary" id="pBtn">Start rolling</button>
+    </div></div>
+  </div>
+  <div class="touch">
+    <div class="group"><button data-d="left" aria-label="Left">◀</button><button data-d="up" aria-label="Up">▲</button><button data-d="down" aria-label="Down">▼</button><button data-d="right" aria-label="Right">▶</button></div>
+  </div>
+  <div class="help">
+    <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to run; hold to keep moving. On a phone, swipe or use the arrows.
+    The snake never steers into a wall on purpose, but it can trap itself in its own coils.
+  </div>
+</main>
+
+<script src="../shared/award.js"></script>
+<script>
+(() => {
+const COLS = 24, ROWS = 15, CELL = 40, W = COLS * CELL, H = ROWS * CELL;
+const ROUND_SECONDS = 25, ROUNDS = 5;
+const GAME = { gameId: 'reverse-snake', gameName: 'Reverse Snake', accent: '#7cffb2', glyph: '●' };
+const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+let state = 'menu', round, lives, crashes, roundsWon, timeLeft, apple, appleDir, snake, rocks, growT, snakeT, appleT, held, flash, message, msgT;
+
+const key = (c) => c[0] + ',' + c[1];
+const inside = (c) => c[0] >= 0 && c[1] >= 0 && c[0] < COLS && c[1] < ROWS;
+
+function newRun() { round = 1; lives = 3; crashes = 0; roundsWon = 0; startRound(); }
+function startRound() {
+  apple = [Math.floor(COLS / 2), Math.floor(ROWS / 2)]; appleDir = [0, 0];
+  snake = [[3, 2], [2, 2], [1, 2], [0, 2]];
+  rocks = new Set();
+  while (rocks.size < 5 + round) {
+    const r = [Math.floor(Math.random() * COLS), Math.floor(Math.random() * ROWS)];
+    if (Math.abs(r[0] - apple[0]) + Math.abs(r[1] - apple[1]) > 3 && r[1] > 3) rocks.add(key(r));
+  }
+  timeLeft = ROUND_SECONDS; growT = 3; snakeT = 0; appleT = 0; held = null; flash = 0;
+  message = round === 1 ? 'Round 1: it is still learning.' : ['', '', 'Round 2: no more wandering.', 'Round 3: it finds the shortest path.', 'Round 4: it guesses where you are going.', 'Round 5: faster, and still guessing.'][round];
+  msgT = 2.2; state = 'play'; hud();
+}
+function hud() {
+  document.getElementById('hRound').textContent = round;
+  document.getElementById('hTime').textContent = Math.ceil(timeLeft);
+  document.getElementById('hCrash').textContent = crashes;
+  document.getElementById('hLives').textContent = '♥'.repeat(lives) + '♡'.repeat(3 - lives);
+}
+
+// ---------- Snake brain ----------
+function blocked(c, ignoreTail) {
+  if (!inside(c) || rocks.has(key(c))) return true;
+  const body = ignoreTail ? snake.slice(0, -1) : snake;
+  return body.some((s) => s[0] === c[0] && s[1] === c[1]);
+}
+function safeMoves() {
+  const h = snake[0];
+  return Object.values(DIRS).map((d) => [h[0] + d[0], h[1] + d[1]]).filter((c) => !blocked(c, true));
+}
+function bfs(target) {
+  const start = snake[0], seen = new Set([key(start)]), prev = new Map(), q = [start];
+  while (q.length) {
+    const c = q.shift();
+    if (c[0] === target[0] && c[1] === target[1]) {
+      let p = c; while (prev.get(key(p)) && key(prev.get(key(p))) !== key(start)) p = prev.get(key(p));
+      return p;
+    }
+    for (const d of Object.values(DIRS)) {
+      const n = [c[0] + d[0], c[1] + d[1]];
+      if (seen.has(key(n)) || blocked(n, true)) continue;
+      seen.add(key(n)); prev.set(key(n), c); q.push(n);
+    }
+  }
+  return null;
+}
+const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
+function chooseMove() {
+  const moves = safeMoves();
+  if (!moves.length) return null;                       // trapped by its own coils
+  if (round === 1 && Math.random() < 0.3) return moves[Math.floor(Math.random() * moves.length)];
+  let target = apple;
+  if (round >= 4) {                                     // aim where the apple is heading
+    const ahead = [apple[0] + appleDir[0] * 2, apple[1] + appleDir[1] * 2];
+    if (inside(ahead) && !rocks.has(key(ahead))) target = ahead;
+  }
+  if (round >= 3) { const step = bfs(target) || bfs(apple); if (step) return step; }
+  return moves.sort((a, b) => dist(a, apple) - dist(b, apple))[0];
+}
+
+// ---------- Update ----------
+function moveApple(d) {
+  const n = [apple[0] + d[0], apple[1] + d[1]];
+  if (!inside(n) || rocks.has(key(n)) || snake.some((s) => s[0] === n[0] && s[1] === n[1])) return;
+  apple = n; appleDir = d;
+}
+function update(dt) {
+  if (msgT > 0) msgT -= dt;
+  if (state !== 'play') return;
+  timeLeft -= dt; flash = Math.max(0, flash - dt);
+  if (held) { appleT -= dt; if (appleT <= 0) { moveApple(DIRS[held]); appleT = 0.11; } }
+  growT -= dt;
+  if (growT <= 0) { snake.push([...snake[snake.length - 1]]); growT = 3; }
+  snakeT -= dt;
+  const step = Math.max(0.12, 0.24 - round * 0.025);
+  if (snakeT <= 0) {
+    snakeT = step;
+    const next = chooseMove();
+    if (!next) { crashes++; flash = 0.6; endRound(true, 'It tied itself in a knot!'); return; }
+    snake.unshift(next); snake.pop();
+    if (next[0] === apple[0] && next[1] === apple[1]) { caught(); return; }
+  }
+  if (timeLeft <= 0) endRound(false, 'You outlasted it.');
+  hud();
+}
+function caught() {
+  lives--; hud();
+  if (lives <= 0) { finish(); return; }
+  state = 'pause';
+  showPanel('Nibbled!', `${lives} ${lives === 1 ? 'life' : 'lives'} left. Same round, new snake.`, 'Have another go', startRound);
+}
+function endRound(crashed, line) {
+  roundsWon++; hud();
+  checkAwards();
+  if (round >= ROUNDS) { finish(); return; }
+  state = 'pause';
+  showPanel(crashed ? 'It tied itself up!' : 'Survived!', `${line} Round ${round + 1} is next: the snake gets smarter.`, 'Next round', () => { round++; startRound(); });
+}
+function finish() {
+  state = 'over';
+  checkAwards();
+  showPanel(roundsWon >= ROUNDS ? 'You beat every snake.' : 'Snack time for the snake.', `You got through ${roundsWon} of ${ROUNDS} rounds and made the snake crash ${crashes} time${crashes === 1 ? '' : 's'}.`, 'Play again', newRun);
+}
+let awarded = {};
+function checkAwards() {
+  const stats = [['Rounds', `${roundsWon} / ${ROUNDS}`], ['Crashes', crashes], ['Lives left', lives]];
+  if (crashes >= 3 && !awarded.gold) { awarded.gold = true; return Award.unlock({ ...GAME, tier: 'gold', title: 'Snake Charmer', line: 'Tricked the snake into crashing three times in one run.', stats }); }
+  if (roundsWon >= ROUNDS && !awarded.silver) { awarded.silver = true; return Award.unlock({ ...GAME, tier: 'silver', title: 'Uneaten', line: 'Survived all five rounds as the apple.', stats }); }
+  if (roundsWon >= 2 && !awarded.bronze) { awarded.bronze = true; return Award.unlock({ ...GAME, tier: 'bronze', title: 'Slippery Apple', line: 'Outran a smarter snake two rounds in a row.', stats }); }
+}
+
+// ---------- Input ----------
+function showPanel(title, text, btn, fn) {
+  document.getElementById('pTitle').textContent = title;
+  document.getElementById('pText').textContent = text;
+  const b = document.getElementById('pBtn'); b.textContent = btn;
+  b.onclick = () => { document.getElementById('panel').hidden = true; fn(); };
+  document.getElementById('panel').hidden = false; b.focus();
+}
+document.getElementById('pBtn').onclick = () => { document.getElementById('panel').hidden = true; awarded = {}; newRun(); };
+const KEYS = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
+window.addEventListener('keydown', (e) => {
+  const d = KEYS[e.code]; if (!d || Award.isOpen()) return;
+  e.preventDefault();
+  if (state === 'play' && held !== d) { held = d; moveApple(DIRS[d]); appleT = 0.16; }
+});
+window.addEventListener('keyup', (e) => { if (KEYS[e.code] === held) held = null; });
+document.querySelectorAll('.touch button').forEach((b) => {
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.classList.add('on'); if (state === 'play') { held = b.dataset.d; moveApple(DIRS[held]); appleT = 0.16; } });
+  const up = () => { b.classList.remove('on'); if (held === b.dataset.d) held = null; };
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => b.addEventListener(ev, up));
+});
+let touch0 = null;
+cv.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') touch0 = [e.clientX, e.clientY]; });
+cv.addEventListener('pointerup', (e) => {
+  if (!touch0 || state !== 'play') return;
+  const dx = e.clientX - touch0[0], dy = e.clientY - touch0[1]; touch0 = null;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) return;
+  moveApple(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? DIRS.right : DIRS.left) : (dy > 0 ? DIRS.down : DIRS.up));
+});
+
+// ---------- Draw ----------
+function draw() {
+  ctx.fillStyle = '#0f1a14'; ctx.fillRect(0, 0, W, H);
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if ((x + y) % 2) { ctx.fillStyle = '#122018'; ctx.fillRect(x * CELL, y * CELL, CELL, CELL); }
+  if (!snake) return;                      // nothing to draw until the first round starts
+  rocks.forEach((k) => { const [x, y] = k.split(',').map(Number); ctx.fillStyle = '#3b4252'; ctx.beginPath(); ctx.roundRect(x * CELL + 5, y * CELL + 7, CELL - 10, CELL - 12, 9); ctx.fill(); });
+  // Snake: tail to head, fading toward the tail.
+  snake.slice().reverse().forEach((s, i, arr) => {
+    const t = i / Math.max(1, arr.length - 1);
+    ctx.fillStyle = flash > 0 ? '#ff5d73' : `rgba(124,255,178,${0.35 + 0.65 * t})`;
+    ctx.beginPath(); ctx.roundRect(s[0] * CELL + 4, s[1] * CELL + 4, CELL - 8, CELL - 8, 10); ctx.fill();
+  });
+  const h = snake[0]; ctx.fillStyle = '#0f1a14';
+  ctx.beginPath(); ctx.arc(h[0] * CELL + 14, h[1] * CELL + 15, 3.5, 0, 7); ctx.arc(h[0] * CELL + 26, h[1] * CELL + 15, 3.5, 0, 7); ctx.fill();
+  // The apple: you.
+  const ax = apple[0] * CELL + CELL / 2, ay = apple[1] * CELL + CELL / 2 + 2;
+  ctx.fillStyle = '#ff5d73'; ctx.beginPath(); ctx.arc(ax, ay, 14, 0, 7); ctx.fill();
+  ctx.fillStyle = '#ffd1d9'; ctx.beginPath(); ctx.arc(ax - 5, ay - 5, 4, 0, 7); ctx.fill();
+  ctx.fillStyle = '#7cffb2'; ctx.beginPath(); ctx.ellipse(ax + 5, ay - 16, 6, 3, -0.6, 0, 7); ctx.fill();
+  if (msgT > 0) {
+    ctx.globalAlpha = Math.min(1, msgT); ctx.fillStyle = 'rgba(11,13,20,.75)'; ctx.fillRect(0, H / 2 - 30, W, 60);
+    ctx.fillStyle = '#e9ecf5'; ctx.font = '700 22px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(message, W / 2, H / 2); ctx.globalAlpha = 1;
+  }
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!Award.isOpen()) update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
