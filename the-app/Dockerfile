@@ -29,7 +29,10 @@ ENV VITE_BLOCKS_OIDC_SCOPE=${VITE_BLOCKS_OIDC_SCOPE}
 ENV VITE_BLOCKS_REDIRECT_URI=${VITE_BLOCKS_REDIRECT_URI}
 ENV VITE_BLOCKS_HOSTED_LOGIN=${VITE_BLOCKS_HOSTED_LOGIN}
 
-RUN NODE_OPTIONS="--max-old-space-size=4096" npx vite build --mode "${ci_build}" \
+# Build args that were not passed arrive as empty strings, and an empty value
+# would override the committed .env.<mode> file, so drop empty VITE_ vars first.
+RUN for v in $(env | sed -n 's/^\(VITE_[A-Z_]*\)=$/\1/p'); do unset "$v"; done \
+  && NODE_OPTIONS="--max-old-space-size=4096" npx vite build --mode "${ci_build}" \
   && node scripts/write-release-env.mjs "${ci_build}"
 
 FROM nginxinc/nginx-unprivileged:1.29-alpine
