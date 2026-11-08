@@ -1,10 +1,11 @@
 import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState } from "react";
 
-// The hero monitor's screen, told once on load in about nine seconds: a rushed
+// The hero monitor's screen, told on a loop: about nine seconds of story, then a calm pause before it starts again: a rushed
 // workday piles up (design file, spreadsheet, deck, calendar, alerts, the clock
 // racing), the Esc key appears and blinks, grows to the centre, a slow cursor
 // presses it, and the screen settles on the PAUSÉ hero. It then stays calm;
-// nothing loops back to the rush. Pure SVG + CSS (pause.css, "Monitor story"),
+// then the story replays. Pure SVG + CSS (pause.css, "Monitor story"),
 // drawn in a 256 × 172 screen. Decorative: the parent scene carries the label.
 
 const ui = { fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif" };
@@ -39,8 +40,15 @@ function Arrow() {
 }
 
 export function MonitorStory({ x, y }: { x: number; y: number }) {
+  // Remounting the SVG restarts every animation, so the story replays from the start.
+  const [cycle, setCycle] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => setCycle((n) => n + 1), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
   return (
-    <svg x={x} y={y} width={256} height={172} viewBox="0 0 256 172" className="ms" aria-hidden="true">
+    <svg key={cycle} x={x} y={y} width={256} height={172} viewBox="0 0 256 172" className="ms" aria-hidden="true">
       <defs>
         <clipPath id="ms-screen"><rect width="256" height="172" rx="10" /></clipPath>
         <clipPath id="ms-card"><rect x="6" y="20" width="244" height="146" rx="10" /></clipPath>
@@ -122,12 +130,12 @@ export function MonitorStory({ x, y }: { x: number; y: number }) {
         </g>
         <g className="ms-cursor"><g className="ms-cursor-press"><Arrow /></g></g>
 
-        {/* 3. The pause: the PAUSÉ hero, small */}
+        {/* 3. The pause: the Descape hero, small */}
         <g className="ms-calm">
           <rect width="256" height="172" fill="#F4F1E8" />
           <rect x="8" y="6" width="13" height="9" rx="2.2" fill="#FFD84D" />
           <text x="14.5" y="12.4" fontSize="4.4" fontWeight="700" textAnchor="middle" fill="#3A2E00" style={ui}>Esc</text>
-          <text x="25" y="13" fontSize="6.4" fontWeight="800" fill="#0E1B4D" style={serif}>PAUSÉ</text>
+          <text x="25" y="13" fontSize="6.4" fontWeight="800" fill="#0E1B4D" style={serif}>Descape</text>
           <rect x="222" y="6" width="26" height="9" rx="4.5" fill="none" stroke="#B9B09A" strokeWidth="0.7" />
           <g clipPath="url(#ms-card)">
             <rect x="6" y="20" width="244" height="146" fill="#1E4FD8" />
@@ -146,7 +154,6 @@ export function MonitorStory({ x, y }: { x: number; y: number }) {
             </g>
           </g>
           <g className="ms-calm-copy">
-            <text x="17" y="45" fontSize="14" fill="#FFFFFF" transform="rotate(-6 17 45)" style={script}>psst,</text>
             <text x="15" y="68" fontSize="25" fontWeight="800" letterSpacing="-0.8" fill="#FFFFFF" style={serif}>press esc.</text>
             <Bar x={16} y={76} w={78} fill="#DCE6FF" o={0.85} />
             <Bar x={16} y={81.5} w={54} fill="#DCE6FF" o={0.85} />

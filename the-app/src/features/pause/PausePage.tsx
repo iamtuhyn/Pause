@@ -1,4 +1,4 @@
-import { ArrowRight, Clock3, Send } from "lucide-react";
+import { ArrowRight, Clock3, Send, Shuffle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { earnedAwards, tiers } from "../games/games";
@@ -7,16 +7,15 @@ import { dailyDrop, playableActivities, playableCount } from "./catalog/catalog"
 import { contributions, copy, pillars } from "./content";
 import { GamePreview } from "./GamePreview";
 import { PauseIllustration } from "./PauseIllustration";
-import { TakeMeSomewhere } from "./TakeMeSomewhere";
 import { useDisplayFont } from "./useDisplayFont";
 import "./pause.css";
+import { Wordmark } from "./Wordmark";
 
 // Public prototype of the PAUSÉ landing page. Rendered full-page, outside
 // the app shell and the sign-in guard.
 export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }) {
   const { status } = useAuth();
   const [now, setNow] = useState(() => new Date());
-  const [thanks, setThanks] = useState(false);
   useDisplayFont();
 
   // Only playable activities can be the drop; one per calendar day. No
@@ -49,35 +48,29 @@ export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }
 
   return (
     <div className="pause-root">
-      <header className="pause-nav">
-        <a className="pause-logo" href="/" onClick={go("/")}>
-          <span className="pause-key" aria-hidden="true">Esc</span>
-          <span>{copy.brand}</span>
-        </a>
-        <nav className="pause-links" aria-label="Main">
-          <a href="#pause-play">{copy.navPlay}</a>
-          <a href="#pause-somewhere">{copy.navDiscover}</a>
-          <a href="#pause-community">{copy.navCommunity}</a>
-        </nav>
-        {status === "authenticated" ? (
-          <a className="pause-button pause-button-quiet" href="/games" onClick={go("/games")}>{copy.navOpenApp}</a>
-        ) : (
-          <a className="pause-button pause-button-quiet" href="/pause/sign-in?returnTo=%2Fgames" onClick={go("/pause/sign-in?returnTo=%2Fgames")}>{copy.navSignIn}</a>
-        )}
-      </header>
-
       <main>
         <div className="pause-hero">
+        <header className="pause-nav">
+          <a className="pause-logo" aria-label={copy.brand} href="/" onClick={go("/")}>
+            <Wordmark />
+          </a>
+          <nav className="pause-links" aria-label="Main">
+            <a href="#pause-play">{copy.navPlay}</a>
+            <a href="#pause-somewhere">{copy.navDiscover}</a>
+            <a href="/pause/sign-in?returnTo=%2Fgames" onClick={go("/pause/sign-in?returnTo=%2Fgames")}>{copy.navCommunity}</a>
+          </nav>
+          {status === "authenticated" ? (
+            <a className="pause-button pause-button-quiet" href="/games" onClick={go("/games")}>{copy.navOpenApp}</a>
+          ) : (
+            <a className="pause-button pause-button-quiet" href="/pause/sign-in?returnTo=%2Fgames" onClick={go("/pause/sign-in?returnTo=%2Fgames")}>{copy.navSignIn}</a>
+          )}
+        </header>
           <div className="pause-hero-copy">
-            <h1><span className="pause-hero-kicker">{copy.heroKicker}</span> {copy.heroTitle}</h1>
+            <h1>{copy.heroTitle}</h1>
             <p className="pause-hero-lead">{copy.heroLead}</p>
             <BreakPicker onStart={play} />
-          </div>
-          <PauseIllustration />
-        </div>
-
         {drop ? (
-          <section className="pause-drop" aria-labelledby="pause-drop-title">
+          <section className="pause-drop pause-drop-hero" aria-labelledby="pause-drop-title">
             <span className="pause-eyebrow">{copy.dropLabel}</span>
             <div className="pause-drop-body">
               <h2 id="pause-drop-title">{drop.title}</h2>
@@ -99,6 +92,10 @@ export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }
             </div>
           </section>
         ) : null}
+          </div>
+          <PauseIllustration />
+        </div>
+
 
         <section className="pause-block" aria-labelledby="pause-pillars-title">
           <div className="pause-block-head">
@@ -201,7 +198,13 @@ export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }
               ))}
             </ul>
           ) : null}
-          <TakeMeSomewhere />
+          <div className="pause-somewhere-cta">
+            <p>{copy.somewhereInvite}</p>
+            <a className="pause-button pause-button-ink" href="/pause/somewhere" onClick={go("/pause/somewhere")}>
+              <Shuffle size={18} aria-hidden="true" />
+              {copy.somewhereCta}
+            </a>
+          </div>
         </section>
 
         <section className="pause-block" id="pause-community" aria-labelledby="pause-community-title">
@@ -214,20 +217,19 @@ export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }
               <span className="pause-eyebrow">{copy.contributeLabel}</span>
               <div className="pause-contribute-options">
                 {contributions.map((label) => (
-                  <button key={label} className="pause-button pause-button-quiet" onClick={() => setThanks(true)}>
+                  <a key={label} className="pause-button pause-button-quiet" href="/pause/sign-in?returnTo=%2Fgames" onClick={go("/pause/sign-in?returnTo=%2Fgames")}>
                     <Send size={16} />
                     {label}
-                  </button>
+                  </a>
                 ))}
               </div>
-              <p className="pause-contribute-note" aria-live="polite">{thanks ? copy.contributeThanks : ""}</p>
             </div>
           </div>
         </section>
       </main>
 
       <footer className="pause-footer">
-        <span className="pause-logo"><span className="pause-key" aria-hidden="true">Esc</span>{copy.brand}</span>
+        <span className="pause-logo" aria-label={copy.brand} role="img"><Wordmark /></span>
         <span>{copy.footer}</span>
       </footer>
     </div>

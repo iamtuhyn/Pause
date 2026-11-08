@@ -60,17 +60,17 @@
 .pause-button-quiet:hover { background: var(--pause-beige); }
 
 /* Hero */
+/* Full-bleed hero: the blue runs edge to edge and the header sits on it. */
 .pause-hero {
-  background: var(--pause-cobalt); border-radius: var(--pause-radius); color: #fff; margin: 0 auto; max-width: var(--pause-container);
-  overflow: hidden; position: relative;
+  background: var(--pause-cobalt); color: #fff; margin: 0 calc(-1 * clamp(16px, 3vw, 40px)); overflow: hidden; position: relative;
 }
+.pause-hero > .pause-nav { padding-left: clamp(24px, 5vw, 72px); padding-right: clamp(24px, 5vw, 72px); position: relative; z-index: 2; }
+.pause-hero .pause-logo, .pause-hero .pause-links a, .pause-hero .pause-button-quiet { color: #fff; }
+.pause-hero .pause-button-quiet { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.55); }
+.pause-hero .pause-button-quiet:hover { background: rgba(255, 255, 255, 0.14); }
+.pause-hero-copy { margin: 0 auto; max-width: var(--pause-container); }
 .pause-hero-copy { padding: clamp(32px, 5vw, 72px) clamp(24px, 5vw, 72px) clamp(220px, 24vw, 300px); position: relative; z-index: 1; }
 .pause-hero h1 { font-size: clamp(64px, 11vw, 168px); font-weight: 800; letter-spacing: -0.035em; line-height: 0.88; padding-bottom: 0.14em; position: relative; text-transform: lowercase; } /* room for the serif descenders */
-/* Script aside above the serif title, like a note scribbled on a postcard. */
-.pause-hero-kicker {
-  display: block; font-family: var(--pause-script); font-size: 0.42em; font-weight: 400; letter-spacing: 0; line-height: 1;
-  margin: 0 0 -0.12em 0.1em; text-transform: none; transform: rotate(-6deg); transform-origin: left bottom;
-}
 .pause-hero-lead { color: #dce6ff; font-size: clamp(18px, 1.8vw, 23px); margin-top: 18px !important; max-width: 28ch; }
 .pause-scene { bottom: 0; display: block; height: min(78%, 560px); left: 0; position: absolute; width: 100%; }
 .pause-cloud { animation: pause-drift 18s ease-in-out infinite alternate; }
@@ -374,7 +374,7 @@
 @keyframes ms-drift { to { transform: translateX(-14px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .pause-cloud, .pause-result, .pause-picker-mood, .pause-soundscape-art span { animation: none !important; }
+  .pause-cloud, .pause-travel-plane, .pause-result, .pause-picker-mood, .pause-soundscape-art span, .pause-key, .pause-scene, .pause-pillar, .pause-game, .pause-unwind-card, .pause-drop-hero, .pause-dialog-backdrop, .pause-dialog { animation: none !important; }
   /* Monitor story: skip the rush and show the calm screen straight away. */
   .ms .ms-rush, .ms .ms-dim, .ms .ms-key, .ms .ms-cursor { display: none; }
   .ms .ms-calm, .ms .ms-calm-copy, .ms .ms-cloud { animation: none !important; opacity: 1; }
@@ -412,3 +412,144 @@
   .pause-hero-copy { padding-bottom: 230px; }
   .pause-scene { height: 260px; }
 }
+
+/* Feedback round: today's drop in the hero, pop-up picker, full-screen players, motion */
+.pause-hero-copy { padding-bottom: clamp(32px, 4vw, 56px); }
+.pause-drop-hero {
+  animation: pause-rise 0.7s ease-out 0.4s both; background: var(--pause-paper); border-radius: 22px; color: var(--pause-ink);
+  border-bottom: 0; display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); margin-top: 28px; max-width: 560px; padding: 16px 20px;
+}
+.pause-drop-hero .pause-drop-body p { color: var(--pause-ink-soft); }
+.pause-drop-hero .pause-drop-side { justify-content: flex-start; }
+.pause-drop-hero .pause-eyebrow { color: var(--pause-cobalt); }
+.pause-drop-hero .pause-eyebrow::before {
+  animation: pause-pulse 2.4s ease-in-out infinite; background: var(--pause-sun); border-radius: 50%; content: ""; display: inline-block;
+  height: 8px; margin-right: 8px; vertical-align: middle; width: 8px;
+}
+@keyframes pause-pulse { 50% { opacity: 0.5; transform: scale(1.6); } }
+
+.pause-dialog-backdrop {
+  align-items: center; animation: pause-fade 0.25s ease-out both; background: rgba(14, 27, 77, 0.55); display: grid; inset: 0;
+  justify-items: center; padding: 16px; position: fixed; z-index: 50;
+}
+.pause-dialog {
+  animation: pause-pop 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; background: var(--pause-paper); border-radius: 28px; box-shadow: 0 30px 80px rgba(14, 27, 77, 0.35);
+  color: var(--pause-ink); display: grid; gap: 14px; max-height: calc(100vh - 32px); max-width: 520px; overflow: auto; padding: 22px; position: relative; width: 100%;
+}
+.pause-dialog .pause-result { max-width: none; }
+.pause-dialog-close {
+  align-items: center; background: var(--pause-beige); border: 0; border-radius: 50%; color: var(--pause-ink); cursor: pointer; display: inline-flex;
+  font-size: 22px; height: 44px; justify-content: center; position: absolute; right: 12px; top: 12px; width: 44px; z-index: 1;
+}
+.pause-dialog-close:focus-visible { outline: 3px solid var(--pause-ink); outline-offset: 3px; }
+@keyframes pause-fade { from { opacity: 0; } }
+@keyframes pause-pop { from { opacity: 0; transform: translateY(14px) scale(0.97); } }
+
+/* Full-screen players: games, breathing and sounds fill the screen below the header */
+.pause-player.is-immersive { padding-bottom: 0; padding-left: 0; padding-right: 0; }
+.pause-player.is-immersive .pause-nav { padding-left: clamp(16px, 3vw, 40px); padding-right: clamp(16px, 3vw, 40px); }
+.pause-player-main.is-immersive { max-width: none; padding: 0; }
+.pause-immersive-stage { display: grid; min-height: calc(100vh - 84px); }
+.pause-immersive-stage > * { max-width: none; width: 100%; }
+.pause-immersive-stage .pause-player-frame { background: var(--player-bg); border-radius: 0; height: calc(100vh - 84px); }
+.pause-immersive-stage .pause-stage { background: transparent; border-radius: 0; min-height: calc(100vh - 84px); }
+.pause-immersive-stage iframe { height: 100%; min-height: 0; }
+
+/* Subtle motion */
+.pause-key { animation: pause-tap 5s ease-in-out infinite; }
+@keyframes pause-tap { 0%, 88%, 100% { transform: none; } 92% { transform: translateY(2px) scale(0.96); } }
+.pause-pillar, .pause-game, .pause-unwind-card { animation: pause-rise 0.6s ease-out both; }
+.pause-pillars > li:nth-child(2), .pause-games > li:nth-child(2), .pause-unwind > li:nth-child(2) { animation-delay: 0.08s; }
+.pause-pillars > li:nth-child(3), .pause-games > li:nth-child(3), .pause-unwind > li:nth-child(3) { animation-delay: 0.16s; }
+.pause-pillars > li:nth-child(4), .pause-games > li:nth-child(4), .pause-unwind > li:nth-child(4) { animation-delay: 0.24s; }
+.pause-pillars > li:nth-child(5), .pause-games > li:nth-child(5), .pause-unwind > li:nth-child(5) { animation-delay: 0.32s; }
+.pause-button:hover:not(:disabled) { transform: translateY(-2px); }
+.pause-scene { animation: pause-float 8s ease-in-out infinite alternate; }
+@keyframes pause-float { to { transform: translateY(-6px); } }
+
+/* Guess the country: region chips and flags */
+.pause-region-chips { justify-content: center; }
+.pause-guess-flag { font-size: clamp(96px, 16vw, 152px); line-height: 1; }
+
+/* Take me somewhere: invitation on the landing, then the travel flow */
+.pause-somewhere-cta { align-items: center; display: flex; flex-wrap: wrap; gap: 16px 24px; justify-content: space-between; margin-bottom: 28px; }
+.pause-somewhere-cta p { color: var(--pause-ink); font-family: var(--pause-display); font-size: clamp(22px, 2.4vw, 28px); font-weight: 700; letter-spacing: -0.01em; max-width: 28ch; }
+.pause-somewhere-main { margin: 0 auto; max-width: var(--pause-container); min-height: calc(100vh - 84px); padding: clamp(24px, 4vw, 48px) clamp(16px, 3vw, 40px); }
+.pause-somewhere-progress { color: var(--pause-ink-soft); font-size: 13px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.pause-somewhere-launch { align-content: center; display: grid; gap: 18px; justify-items: center; min-height: 70vh; text-align: center; }
+.pause-travel { max-width: 480px; width: 100%; }
+.pause-travel-trail { fill: none; stroke: var(--pause-cobalt); stroke-dasharray: 6 8; stroke-width: 3; }
+.pause-travel-plane { animation: pause-fly 2.4s ease-in-out forwards; fill: var(--pause-ink); transform: translate(20px, 180px); }
+@keyframes pause-fly { to { transform: translate(460px, 50px); } }
+.pause-somewhere-page h1 { color: var(--pause-ink); font-family: var(--pause-display); font-size: clamp(44px, 6.5vw, 80px); font-weight: 800; letter-spacing: -0.03em; line-height: 0.95; text-transform: lowercase; }
+.pause-somewhere-step > p { color: var(--pause-ink-soft); font-size: 18px; margin: 10px 0 26px; }
+.pause-somewhere-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.pause-somewhere-grid-three { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.pause-somewhere-choice { align-content: start; background: #fff; border: 0; border-radius: 22px; box-shadow: inset 0 0 0 1.5px var(--pause-paper-line); color: var(--pause-ink); cursor: pointer; display: grid; font: inherit; gap: 8px; min-height: 150px; padding: 22px; text-align: left; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.pause-somewhere-choice:hover { box-shadow: inset 0 0 0 2px var(--pause-ink); transform: translateY(-2px); }
+.pause-somewhere-choice strong { font-family: var(--pause-display); font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.pause-somewhere-choice span { font-size: 15px; line-height: 1.5; }
+.pause-somewhere-flag { font-size: 40px; line-height: 1; }
+.pause-somewhere-result { display: grid; gap: 22px; }
+.pause-somewhere-result h1 { font-size: clamp(56px, 9vw, 120px); line-height: 0.9; }
+.pause-somewhere-summary { font-size: 20px; max-width: 40ch; }
+.pause-somewhere-body { display: grid; gap: 32px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.pause-somewhere-body h2, .pause-somewhere-sources h2 { font-size: 13px; font-weight: 800; letter-spacing: 0.12em; margin-bottom: 10px; text-transform: uppercase; }
+.pause-somewhere-body ul, .pause-somewhere-body ol { display: grid; font-size: 17px; gap: 10px; line-height: 1.5; margin: 0; padding-left: 20px; }
+.pause-somewhere-body p { font-size: 17px; line-height: 1.6; }
+.pause-timeline { list-style: decimal; }
+.pause-months { display: flex; flex-wrap: wrap; gap: 8px; }
+.pause-month { background: #fff; border: 0; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--pause-paper-line); color: var(--pause-ink); cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; min-height: 44px; min-width: 56px; padding: 0 12px; }
+.pause-month[data-best] { box-shadow: inset 0 0 0 1.5px var(--pause-cobalt); color: var(--pause-cobalt); }
+.pause-month[aria-pressed="true"] { background: var(--pause-ink); box-shadow: none; color: #fff; }
+.pause-somewhere-verdict { font-weight: 700; margin-top: 16px !important; }
+.pause-somewhere-note { color: var(--pause-ink-soft); font-size: 14px !important; line-height: 1.5 !important; }
+.pause-somewhere-sources { border-top: 1.5px solid var(--pause-paper-hair); display: grid; gap: 12px; padding-top: 22px; }
+.pause-somewhere-links { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Wordmark: D [Esc] ape, with the keycap sitting in the middle of the word */
+.pause-wordmark { align-items: center; display: inline-flex; gap: 3px; }
+.pause-wordmark .pause-key { font-size: 12px; margin: 0 2px; padding: 3px 7px 5px; }
+
+/* Greyed world map for the continent step */
+.pause-worldmap { display: block; margin: 0 auto 28px; max-width: 960px; width: 100%; }
+.pause-map-land { cursor: pointer; fill: #d3cdbd; stroke: var(--pause-paper); stroke-linejoin: round; stroke-width: 0.8; transition: fill 0.2s ease; }
+.pause-map-land:hover { fill: var(--pause-cobalt); }
+
+/* Sign in, create account and reset password: one split layout */
+.pause-auth { display: grid; gap: clamp(24px, 4vw, 56px); grid-template-columns: minmax(0, 1fr) minmax(0, 480px); margin: 0 auto; max-width: var(--pause-container); min-height: calc(100vh - 110px); align-items: center; padding: clamp(16px, 4vw, 48px) 0; }
+.pause-auth-side { background: var(--pause-cobalt); border-radius: var(--pause-radius); color: #fff; display: grid; gap: 18px; padding: clamp(28px, 5vw, 64px); align-content: end; min-height: 420px; }
+.pause-auth-side h1 { font-size: clamp(64px, 9vw, 130px); font-weight: 800; letter-spacing: -0.035em; line-height: 0.88; text-transform: lowercase; }
+.pause-auth-side h1 span { color: var(--pause-sun); }
+.pause-auth-side p { color: #dce6ff; font-size: 18px; line-height: 1.5; max-width: 30ch; }
+.pause-auth-guest { font-size: 15px !important; }
+.pause-auth-card { background: #fff; border-radius: var(--pause-radius); box-shadow: inset 0 0 0 1.5px var(--pause-paper-hair); display: grid; gap: 18px; padding: clamp(24px, 4vw, 40px); }
+.pause-auth-tabs { background: var(--pause-beige); border-radius: 999px; display: grid; gap: 4px; grid-template-columns: 1fr 1fr; padding: 4px; }
+.pause-auth-tabs button { background: transparent; border: 0; border-radius: 999px; color: var(--pause-ink-soft); cursor: pointer; font: inherit; font-size: 15px; font-weight: 700; min-height: 44px; }
+.pause-auth-tabs button[aria-selected="true"] { background: var(--pause-ink); color: #fff; }
+.pause-auth-form { display: grid; gap: 16px; }
+.pause-auth-form label { display: grid; gap: 6px; }
+.pause-auth-form label > span { font-size: 14px; font-weight: 700; }
+.pause-auth-form input[type="email"], .pause-auth-form input[type="password"], .pause-auth-form input:not([type]), .pause-auth-form input[type="text"] {
+  background: var(--pause-paper); border: 0; border-radius: 14px; box-shadow: inset 0 0 0 1.5px var(--pause-paper-line); color: var(--pause-ink); font: inherit; font-size: 16px; min-height: 48px; padding: 0 14px;
+}
+.pause-auth-form input:focus { box-shadow: inset 0 0 0 2.5px var(--pause-ink); outline: none; }
+.pause-auth-row { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; font-size: 15px; }
+.pause-auth-row a { color: var(--pause-cobalt); font-weight: 700; }
+.pause-auth-check { align-items: center; display: inline-flex; gap: 8px; }
+.pause-auth-check input { height: 18px; width: 18px; }
+.pause-auth-note { color: var(--pause-ink-soft); font-size: 14px; line-height: 1.5; }
+.pause-auth-title { align-items: center; display: flex; font-size: 17px; font-weight: 800; gap: 8px; }
+.pause-auth-done { background: #d3ebcb; border-radius: 14px; color: #174a20; display: grid; font-size: 16px; gap: 12px; justify-items: start; line-height: 1.5; padding: 16px; }
+.pause-auth .pause-signin-alert { color: var(--pause-sun-ink) !important; }
+@media (max-width: 860px) { .pause-auth { grid-template-columns: 1fr; } .pause-auth-side { min-height: 0; } }
+
+/* Full-screen players: the header sits on the same colour as the game or sound page,
+   so there is no seam. Arcade games are dark (the games\' own background); the rest are paper. */
+.pause-player.is-immersive { --player-bg: var(--pause-paper); background: var(--player-bg); min-height: 100vh; }
+.pause-player.is-immersive .pause-nav { background: transparent; }
+.pause-player.is-immersive.is-dark { --player-bg: #0b0d14; color: #e6eaf6; }
+.pause-player.is-dark .pause-logo, .pause-player.is-dark .pause-button-quiet { color: #e6eaf6; }
+.pause-player.is-dark .pause-button-quiet { box-shadow: inset 0 0 0 1.5px rgba(230, 234, 246, 0.35); }
+.pause-player.is-dark .pause-button-quiet:hover { background: rgba(230, 234, 246, 0.12); }
+.pause-immersive-stage .pause-stage { background: transparent; }

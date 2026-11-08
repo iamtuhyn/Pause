@@ -11,8 +11,10 @@ import { GamesPage } from "../../features/games/GamesPage";
 import { gameById } from "../../features/games/games";
 import { PausePage } from "../../features/pause/PausePage";
 import { PausePlayPage } from "../../features/pause/PausePlayPage";
+import { PauseSomewherePage } from "../../features/pause/SomewherePage";
 import { activityById, isPlayable } from "../../features/pause/catalog/catalog";
 import { PauseSignInPage } from "../../features/pause/PauseSignInPage";
+import { PauseResetPage } from "../../features/pause/PauseResetPage";
 import { ProfilePage } from "../../features/profile/ProfilePage";
 
 const protectedRoutes: Record<string, ComponentType<{ onNavigate: (path: string) => void }>> = {
@@ -50,6 +52,9 @@ export function AppRouter() {
   if (path === "/" || path === "/pause") {
     return <PausePage onNavigate={navigate} />;
   }
+  if (path === "/pause/somewhere") {
+    return <PauseSomewherePage onNavigate={navigate} />;
+  }
   // Any playable PAUSÉ catalogue activity, open to everyone.
   const pauseActivity = /^\/pause\/play\/([a-z0-9-]+)$/.exec(path);
   if (pauseActivity) {
@@ -62,6 +67,12 @@ export function AppRouter() {
   if (path === "/pause/sign-in") {
     const returnTo = new URLSearchParams(search).get("returnTo") || undefined;
     return <PauseSignInPage onNavigate={navigate} returnTo={returnTo} />;
+  }
+
+  // Reset password: the emailed link opens this page with its code.
+  if (path === "/pause/reset-password") {
+    const code = new URLSearchParams(search).get("code") || undefined;
+    return <PauseResetPage code={code} onNavigate={navigate} />;
   }
 
   if (path === "/login") {

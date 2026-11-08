@@ -1,14 +1,14 @@
 import type { Activity, Category, Licence, Minutes, PillarId } from "./activity";
 
 const PAUSE_ORIGINAL: Licence = {
-  attribution: "PAUSÉ",
+  attribution: "Descape",
   code: "pause-original",
   commercialUse: true,
   derivatives: false,
-  name: "Original PAUSÉ work",
+  name: "Original Descape work",
   shareAlike: false
 };
-const PAUSE_SOURCE = { creator: "PAUSÉ", provider: "pause" };
+const PAUSE_SOURCE = { creator: "Descape", provider: "pause" };
 const NATURAL_EARTH: Licence = {
   attribution: "Made with Natural Earth",
   code: "public-domain",
@@ -94,13 +94,13 @@ export const ACTIVITIES: Activity[] = [
   // Discover: country outlines from Natural Earth (public domain), drawn and quizzed here.
   {
     access: "guest", createdAt: DATE, difficulty: "easy", id: "guess-country", licence: NATURAL_EARTH, maxMinutes: 2, moods: ["curious", "playful"],
-    pillar: "discover", renderer: { kind: "guess-country", level: "easy", rounds: 5 }, slug: "guess-country", source: NATURAL_EARTH_SOURCE, status: "published",
-    summary: "Five outlines, four names each. Trust your gut, then see where it is.", tags: ["geography", "guess"], title: "Guess the country", type: "guess", updatedAt: DATE
+    pillar: "discover", renderer: { kind: "guess-country", level: "easy", questions: ["capital", "capital", "flag", "landmark", "language"], rounds: 5 }, slug: "guess-country", source: NATURAL_EARTH_SOURCE, status: "published",
+    summary: "Capitals, flags, landmarks and languages. Pick a region and go.", tags: ["geography", "guess"], title: "Guess the country", type: "guess", updatedAt: DATE
   },
   {
     access: "guest", createdAt: DATE, difficulty: "hard", id: "outline-expert", licence: NATURAL_EARTH, maxMinutes: 5, moods: ["curious", "focused"],
-    pillar: "discover", renderer: { kind: "guess-country", level: "any", rounds: 10 }, slug: "outline-expert", source: NATURAL_EARTH_SOURCE, status: "published",
-    summary: "Ten outlines, tricky ones included. Think you know the map?", tags: ["geography", "guess"], title: "Outline expert", type: "guess", updatedAt: DATE
+    pillar: "discover", renderer: { kind: "guess-country", level: "any", questions: ["outline"], rounds: 10 }, slug: "outline-expert", source: NATURAL_EARTH_SOURCE, status: "published",
+    summary: "Ten outlines from any region, tricky ones included. Think you know the map?", tags: ["geography", "guess"], title: "Outline expert", type: "guess", updatedAt: DATE
   },
 
   // Drafts: planned experiences with no content yet. Shown only as previews.

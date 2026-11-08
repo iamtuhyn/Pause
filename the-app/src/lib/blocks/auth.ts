@@ -197,3 +197,12 @@ export async function logout(): Promise<void> {
   await blocksClient.auth.logout({ refreshToken: getRefreshToken() }).catch(() => undefined);
   clearLocalTokens();
 }
+
+// Password sign-in from the app's own form. The SDK sends the request and returns
+// IAM's answer unchanged; any tokens in it are kept the same way a hosted login's are.
+export async function signInWithPassword(username: string, password: string, rememberMe: boolean): Promise<void> {
+  const response = await blocksClient.auth.login({ username, password, rememberMe });
+  if (response.error) throw new Error(response.error_description ?? response.error);
+  const accessToken = response.access_token ?? response.accessToken;
+  if (accessToken) persistTokens(accessToken, response.refresh_token ?? response.refreshToken);
+}

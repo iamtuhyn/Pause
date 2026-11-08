@@ -39,6 +39,9 @@ export type Source = {
   url?: string;
 };
 
+// Question types for "guess-country": the outline, or a fact about the country.
+export type GuessQuestion = "outline" | "capital" | "flag" | "landmark" | "language";
+
 // How the activity is played or shown. "none" means there is nothing to open
 // yet, which keeps an activity out of every suggestion even if published.
 export type Renderer =
@@ -46,7 +49,7 @@ export type Renderer =
   | { kind: "breathing"; exhaleSeconds: number; inhaleSeconds: number }
   | { kind: "soundscape"; preset: "rain" | "waves" }
   | { kind: "doodle"; hidden?: boolean; prompt: string }
-  | { kind: "guess-country"; level: "easy" | "any"; rounds: number }
+  | { kind: "guess-country"; level: "easy" | "any"; questions: GuessQuestion[]; rounds: number }
   | { kind: "memory-flash"; rounds: number }
   | { kind: "none" };
 
