@@ -1,7 +1,8 @@
-import { ArrowLeft, KeyRound } from "lucide-react";
+import { ArrowLeft, KeyRound, Lock, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { requestPasswordReset, resetPassword } from "../../lib/blocks/account";
+import { AuthAlert, AuthField, AuthSide } from "./AuthParts";
 import { copy } from "./content";
 import { Wordmark } from "./Wordmark";
 import { useDisplayFont } from "./useDisplayFont";
@@ -63,14 +64,14 @@ export function PauseResetPage({ code, onNavigate }: { code?: string; onNavigate
       </header>
 
       <main className="pause-auth">
-        <section className="pause-auth-side">
-          <h1>reset <span>it</span></h1>
-          <p>Forgotten passwords happen to everyone. It takes a minute to set a new one.</p>
-        </section>
+        <AuthSide title="reset" accent="it" lead="Forgotten passwords happen to everyone. It takes a minute to set a new one." />
 
-        <section className="pause-auth-card" aria-label="Reset password">
-          <p className="pause-auth-title"><KeyRound size={20} aria-hidden="true" /> {code ? "Choose a new password" : "Reset your password"}</p>
-          {error ? <p className="pause-signin-alert" role="alert">{error}</p> : null}
+        <section className="pause-auth-card" aria-labelledby="pause-auth-heading">
+          <div className="pause-auth-head">
+            <h2 id="pause-auth-heading"><KeyRound size={22} aria-hidden="true" /> {code ? "Choose a new password" : "Reset your password"}</h2>
+            <p>{code ? "Pick something you don't use anywhere else." : "Tell us your email and we'll send a link."}</p>
+          </div>
+          {error ? <AuthAlert>{error}</AuthAlert> : null}
 
           {done === "sent" ? (
             <p className="pause-auth-done" role="status">If an account exists for that address, a reset link is on its way. Check your inbox and spam folder.</p>
@@ -81,23 +82,14 @@ export function PauseResetPage({ code, onNavigate }: { code?: string; onNavigate
             </div>
           ) : code ? (
             <form className="pause-auth-form" onSubmit={submit}>
-              <label>
-                <span>New password</span>
-                <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required />
-              </label>
-              <label>
-                <span>Repeat new password</span>
-                <input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" required />
-              </label>
-              <button className="pause-button pause-button-ink" type="submit" disabled={pending}>{pending ? "One moment…" : "Save new password"}</button>
+              <AuthField icon={Lock} label="New password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required />
+              <AuthField icon={Lock} label="Repeat new password" type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" required />
+              <button className="pause-button pause-button-ink pause-auth-submit" type="submit" disabled={pending}>{pending ? "One moment…" : "Save new password"}</button>
             </form>
           ) : (
             <form className="pause-auth-form" onSubmit={submit}>
-              <label>
-                <span>Email</span>
-                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
-              </label>
-              <button className="pause-button pause-button-ink" type="submit" disabled={pending}>{pending ? "One moment…" : "Send reset link"}</button>
+              <AuthField icon={Mail} label="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
+              <button className="pause-button pause-button-ink pause-auth-submit" type="submit" disabled={pending}>{pending ? "One moment…" : "Send reset link"}</button>
             </form>
           )}
         </section>

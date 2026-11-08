@@ -1,11 +1,12 @@
 import { ArrowLeft, ArrowRight, ExternalLink, Landmark, Plane, UtensilsCrossed } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { COUNTRIES, CONTINENTS } from "./data/somewhere";
 import type { City, Country, Lens } from "./data/somewhere";
 import { flagEmoji } from "./data/countryFacts";
 import { copy } from "./content";
 import { useDisplayFont } from "./useDisplayFont";
+import { RoadTrip } from "./Scenes";
 import { WorldMap } from "./WorldMap";
 import "./pause.css";
 import { Wordmark } from "./Wordmark";
@@ -15,10 +16,10 @@ import { Wordmark } from "./Wordmark";
 // one question, so the screen never asks for more than one decision at a time.
 type Step = "launch" | "continent" | "lens" | "country" | "city" | "result";
 
-const LENSES: { id: Lens; line: string; icon: typeof Plane; title: string }[] = [
-  { id: "travel", icon: Plane, line: "Where to go, when to go, and what to see first.", title: "Travel destination" },
-  { id: "history", icon: Landmark, line: "How the place came to be, in a few short steps.", title: "History" },
-  { id: "culture", icon: UtensilsCrossed, line: "What to eat, what to celebrate, and a word to try.", title: "Culture" },
+const LENSES: { id: Lens; line: string; icon: typeof Plane; title: string; tone: string }[] = [
+  { id: "travel", icon: Plane, line: "Where to go, when to go, and what to see first.", title: "Travel destination", tone: "#d4defb" },
+  { id: "history", icon: Landmark, line: "How the place came to be, in a few short steps.", title: "History", tone: "#ffe68a" },
+  { id: "culture", icon: UtensilsCrossed, line: "What to eat, what to celebrate, and a word to try.", title: "Culture", tone: "#f8d6cd" },
 ];
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -52,6 +53,7 @@ export function PauseSomewherePage({ onNavigate }: { onNavigate: (path: string) 
   }, [step]);
 
   const countries = COUNTRIES.filter((c) => c.continent === continent);
+  const tone = CONTINENTS.find((c) => c.id === continent)?.tone;
   const stepIndex = ORDER.indexOf(step);
 
   function back() {
@@ -83,9 +85,6 @@ export function PauseSomewherePage({ onNavigate }: { onNavigate: (path: string) 
           <ArrowLeft size={18} aria-hidden="true" />
           {copy.backNav}
         </button>
-        <a className="pause-button pause-button-quiet" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }}>
-          {copy.backToPause}
-        </a>
       </header>
 
       <main className="pause-somewhere-main">
@@ -111,6 +110,7 @@ export function PauseSomewherePage({ onNavigate }: { onNavigate: (path: string) 
                 >
                   <strong>{item.id}</strong>
                   <span>{item.line}</span>
+                  <ArrowRight size={18} aria-hidden="true" className="pause-somewhere-arrow" />
                 </button>
               ))}
             </div>
@@ -124,6 +124,7 @@ export function PauseSomewherePage({ onNavigate }: { onNavigate: (path: string) 
                 <button
                   key={item.id}
                   className="pause-somewhere-choice"
+                  style={{ background: item.tone }}
                   onClick={() => {
                     setLens(item.id);
                     setStep("country");
@@ -132,6 +133,7 @@ export function PauseSomewherePage({ onNavigate }: { onNavigate: (path: string) 
                   <item.icon size={26} aria-hidden="true" />
                   <strong>{item.title}</strong>
                   <span>{item.line}</span>
+                  <ArrowRight size={18} aria-hidden="true" className="pause-somewhere-arrow" />
                 </button>
               ))}
             </div>
@@ -145,6 +147,7 @@ export function PauseSomewherePage({ onNavigate }: { onNavigate: (path: string) 
                 <button
                   key={item.id}
                   className="pause-somewhere-choice"
+                  style={{ background: tone }}
                   onClick={() => {
                     setCountry(item);
                     setStep("city");
@@ -153,6 +156,7 @@ export function PauseSomewherePage({ onNavigate }: { onNavigate: (path: string) 
                   <span className="pause-somewhere-flag" aria-hidden="true">{flagEmoji(item.iso2)}</span>
                   <strong>{item.name}</strong>
                   <span>{item.cities.map((c) => c.name).join(" or ")}</span>
+                  <ArrowRight size={18} aria-hidden="true" className="pause-somewhere-arrow" />
                 </button>
               ))}
             </div>
@@ -166,6 +170,7 @@ export function PauseSomewherePage({ onNavigate }: { onNavigate: (path: string) 
                 <button
                   key={item.id}
                   className="pause-somewhere-choice"
+                  style={{ background: tone }}
                   onClick={() => {
                     setCity(item);
                     setStep("result");
@@ -173,6 +178,7 @@ export function PauseSomewherePage({ onNavigate }: { onNavigate: (path: string) 
                 >
                   <strong>{item.name}</strong>
                   <span>{item.summary}</span>
+                  <ArrowRight size={18} aria-hidden="true" className="pause-somewhere-arrow" />
                 </button>
               ))}
             </div>
@@ -198,20 +204,22 @@ export function PauseSomewherePage({ onNavigate }: { onNavigate: (path: string) 
 function Launch({ onSkip }: { onSkip: () => void }) {
   return (
     <div className="pause-somewhere-launch" role="status" aria-live="polite">
-      <svg className="pause-travel" viewBox="0 0 480 220" aria-hidden="true">
-        <path className="pause-travel-trail" d="M20 180 C120 40 260 220 460 50" />
-        <path className="pause-travel-plane" d="M-14 0 L12 -7 L5 0 L12 7 Z" />
-      </svg>
+      <div className="pause-travel is-live" aria-hidden="true"><RoadTrip /></div>
       <p className="pause-breath-word">Packing your bags…</p>
       <button className="pause-text-button" onClick={onSkip}>Skip the trip <ArrowRight size={16} aria-hidden="true" /></button>
     </div>
   );
 }
 
+// Each new question takes focus, so screen-reader and keyboard users start at its heading.
 function Question({ children, lead, title }: { children: ReactNode; lead: string; title: string }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    heading.current?.focus({ preventScroll: false });
+  }, [title]);
   return (
     <section className="pause-somewhere-step" aria-labelledby="pause-somewhere-q">
-      <h1 id="pause-somewhere-q">{title}</h1>
+      <h1 id="pause-somewhere-q" ref={heading} tabIndex={-1}>{title}</h1>
       <p>{lead}</p>
       {children}
     </section>
@@ -235,9 +243,15 @@ function Result({
   onMonth: (month: number) => void;
   onRestart: () => void;
 }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    heading.current?.focus();
+  }, [city.id, lens]);
   const bestNames = city.best.map((m) => MONTHS[m - 1]).join(", ");
-  const near = city.best.some((b) => Math.abs(b - month) === 1 || Math.abs(b - month) === 11);
-  const verdict = city.best.includes(month)
+  // city.best counts months from 1; the picker counts from 0.
+  const picked = month + 1;
+  const near = city.best.some((b) => Math.abs(b - picked) === 1 || Math.abs(b - picked) === 11);
+  const verdict = city.best.includes(picked)
     ? "Best time to go. The weather and the crowds line up."
     : near
       ? "A shoulder month. Good weather, a little more company, and fewer queues than the peak."
@@ -246,7 +260,7 @@ function Result({
   return (
     <article className="pause-somewhere-result" aria-labelledby="pause-result-title">
       <p className="pause-eyebrow">{country.name} · {country.continent} · {LENSES.find((l) => l.id === lens)?.title}</p>
-      <h1 id="pause-result-title">{city.name}</h1>
+      <h1 id="pause-result-title" ref={heading} tabIndex={-1}>{city.name}</h1>
       <p className="pause-somewhere-summary">{city.summary}</p>
 
       {lens === "travel" ? (
@@ -310,14 +324,14 @@ function Result({
         <h2 id="pause-sources-title">Read more, free</h2>
         <div className="pause-somewhere-links">
           <a className="pause-button pause-button-quiet" href={`https://en.wikipedia.org/wiki/${city.wiki}`} target="_blank" rel="noopener noreferrer">
-            Wikipedia: {city.name} <ExternalLink size={16} aria-hidden="true" />
+            Wikipedia: {city.name} <ExternalLink size={16} aria-hidden="true" /><span className="pause-sr-only">(opens in a new tab)</span>
           </a>
           <a className="pause-button pause-button-quiet" href={`https://en.wikivoyage.org/wiki/${city.voyage}`} target="_blank" rel="noopener noreferrer">
-            Wikivoyage: {city.name} <ExternalLink size={16} aria-hidden="true" />
+            Wikivoyage: {city.name} <ExternalLink size={16} aria-hidden="true" /><span className="pause-sr-only">(opens in a new tab)</span>
           </a>
           {city.more ? (
             <a className="pause-button pause-button-quiet" href={`https://en.wikipedia.org/wiki/${city.more.slug}`} target="_blank" rel="noopener noreferrer">
-              {city.more.label} <ExternalLink size={16} aria-hidden="true" />
+              {city.more.label} <ExternalLink size={16} aria-hidden="true" /><span className="pause-sr-only">(opens in a new tab)</span>
             </a>
           ) : null}
         </div>

@@ -1,7 +1,9 @@
-import { ArrowLeft, Clock3 } from "lucide-react";
-import { useEffect } from "react";
+import { ArrowLeft } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import type { Activity } from "./catalog/activity";
-import { copy, pillars } from "./content";
+import { copy } from "./content";
+import { DEFAULT_THEME, GameLobby, THEMES } from "./GameLobby";
 import { BreathingPlayer } from "./players/BreathingPlayer";
 import { DoodlePlayer } from "./players/DoodlePlayer";
 import { GuessCountryPlayer } from "./players/GuessCountryPlayer";
@@ -11,26 +13,41 @@ import { useDisplayFont } from "./useDisplayFont";
 import "./pause.css";
 import { Wordmark } from "./Wordmark";
 
-// Public, full-page player for any playable catalogue activity. Games, breathing
-// and sounds fill the screen below the header, so their instructions show without
-// scrolling. Visitors can open it without signing in.
+// Public, full-page player for any playable catalogue activity. It opens on a
+// start screen (rules and one big button); starting swaps in the game itself.
+// The whole page, header included, takes the game's own colours, so there is
+// no seam or frame. Visitors can open it without signing in.
 export function PausePlayPage({ activity, onNavigate }: { activity: Activity; onNavigate: (path: string) => void }) {
   useDisplayFont();
+  const [started, setStarted] = useState(false);
+  const [frameBg, setFrameBg] = useState<string>();
+  const start = useCallback(() => setStarted(true), []);
 
   useEffect(() => {
     const previous = document.title;
     document.title = `${activity.title} · ${copy.brand}`;
+    setStarted(false);
     return () => {
       document.title = previous;
     };
-  }, [activity.title]);
+  }, [activity.id, activity.title]);
 
   const renderer = activity.renderer;
-  const immersive = renderer.kind === "arcade-game" || renderer.kind === "breathing" || renderer.kind === "soundscape";
-  const pillar = pillars.find((p) => p.id === activity.pillar);
+  const fills = renderer.kind === "arcade-game" || renderer.kind === "breathing" || renderer.kind === "soundscape";
+  const theme = THEMES[activity.id] ?? DEFAULT_THEME;
+  const style = {
+    "--player-bg": started && frameBg ? frameBg : theme.bg,
+    "--player-ink": theme.ink,
+    "--player-soft": theme.soft,
+    "--player-accent": theme.accent,
+    "--player-accent-ink": theme.accentInk,
+    "--player-surface": theme.surface
+  } as CSSProperties;
 
-  // The previous screen in this tab; the playground when this page was opened directly.
+  // Back from a running game returns to its start screen; from the start
+  // screen, to the previous page (or the landing page when opened directly).
   function goBack() {
+    if (started) return setStarted(false);
     if (window.history.length > 1) window.history.back();
     else onNavigate("/");
   }
@@ -38,11 +55,11 @@ export function PausePlayPage({ activity, onNavigate }: { activity: Activity; on
   function renderPlayer() {
     switch (renderer.kind) {
       case "arcade-game":
-        return <ArcadeFrame src={renderer.src} title={activity.title} />;
+        return <ArcadeFrame src={renderer.src} title={activity.title} onBackground={setFrameBg} />;
       case "breathing":
-        return <BreathingPlayer exhaleSeconds={renderer.exhaleSeconds} inhaleSeconds={renderer.inhaleSeconds} minutes={activity.maxMinutes} />;
+        return <BreathingPlayer autoStart exhaleSeconds={renderer.exhaleSeconds} inhaleSeconds={renderer.inhaleSeconds} minutes={activity.maxMinutes} />;
       case "soundscape":
-        return <SoundscapePlayer minutes={activity.maxMinutes} preset={renderer.preset} />;
+        return <SoundscapePlayer autoStart minutes={activity.maxMinutes} preset={renderer.preset} />;
       case "doodle":
         return <DoodlePlayer hidden={renderer.hidden} prompt={renderer.prompt} />;
       case "guess-country":
@@ -55,7 +72,7 @@ export function PausePlayPage({ activity, onNavigate }: { activity: Activity; on
   }
 
   return (
-    <div className={immersive ? `pause-root pause-player is-immersive${renderer.kind === "arcade-game" ? " is-dark" : ""}` : "pause-root pause-player"}>
+    <div className={`pause-root pause-player is-immersive${theme.dark ? " is-dark" : ""}`} style={style}>
       <header className="pause-nav">
         <a className="pause-logo" aria-label={copy.brand} href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }}>
           <Wordmark />
@@ -63,34 +80,52 @@ export function PausePlayPage({ activity, onNavigate }: { activity: Activity; on
         <span className="pause-nav-spacer" />
         <button className="pause-button pause-button-quiet" onClick={goBack}>
           <ArrowLeft size={18} aria-hidden="true" />
-          {copy.backNav}
+          {started ? "How to play" : copy.backNav}
         </button>
-        <a className="pause-button pause-button-quiet" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }}>
-          {copy.backToPause}
-        </a>
       </header>
-      <main className={immersive ? "pause-player-main is-immersive" : "pause-player-main"}>
-        {immersive ? (
-          <h1 className="pause-sr-only">{activity.title}</h1>
+      <main className={fills && started ? "pause-player-main is-immersive" : "pause-player-main"}>
+        {!started ? (
+          <GameLobby activity={activity} onStart={start} />
+        ) : fills ? (
+          <>
+            <h1 className="pause-sr-only">{activity.title}</h1>
+            <div className="pause-immersive-stage">{renderPlayer()}</div>
+          </>
         ) : (
-          <div className="pause-player-head">
-            <span className="pause-player-meta"><Clock3 size={15} aria-hidden="true" /> {pillar?.title} · up to {activity.maxMinutes} min</span>
-            <h1>{activity.title}</h1>
-            <p>{activity.summary}</p>
-          </div>
+          <>
+            <h1 className="pause-player-title">{activity.title}</h1>
+            {renderPlayer()}
+          </>
         )}
-        {immersive ? <div className="pause-immersive-stage">{renderPlayer()}</div> : renderPlayer()}
       </main>
     </div>
   );
 }
 
-// The arcade games are same-origin static pages that fill the screen, so the
-// game and its instructions sit in view without scrolling the page.
-function ArcadeFrame({ src, title }: { src: string; title: string }) {
+// The arcade games are same-origin static pages that fill the screen. The start
+// screen already explained the rules, so the game's own start button is pressed
+// for the player once it loads, and focus moves into the game.
+// The page then takes the game's own background colour, so the header has no seam.
+function ArcadeFrame({ onBackground, src, title }: { onBackground: (color: string) => void; src: string; title: string }) {
   return (
     <div className="pause-player-frame">
-      <iframe src={src} title={title} allow="fullscreen; web-share; autoplay" onLoad={(event) => event.currentTarget.contentWindow?.focus()} />
+      <iframe
+        src={src}
+        title={title}
+        allow="fullscreen; web-share; autoplay"
+        onLoad={(event) => {
+          const frame = event.currentTarget.contentWindow;
+          try {
+            const body = frame?.document.body;
+            const color = body ? frame.getComputedStyle(body).backgroundColor : "";
+            if (color && color !== "rgba(0, 0, 0, 0)") onBackground(color);
+            frame?.document.querySelector<HTMLButtonElement>("#pBtn")?.click();
+          } catch {
+            // A different origin: leave the game's own start screen in place.
+          }
+          frame?.focus();
+        }}
+      />
     </div>
   );
 }

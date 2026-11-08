@@ -1,14 +1,15 @@
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import { SleepySun } from "../Scenes";
 
-// Guided breathing: the circle grows on the in-breath and shrinks on the
-// out-breath. The words carry the guidance on their own, so it still works
-// with reduced motion (the circle then stays still).
-export function BreathingPlayer({ exhaleSeconds, inhaleSeconds, minutes }: { exhaleSeconds: number; inhaleSeconds: number; minutes: number }) {
+// Guided breathing: a sleepy sun rises on the in-breath and sinks behind the
+// clouds on the out-breath. The words carry the guidance on their own, so it
+// still works with reduced motion (the sun then stays still).
+export function BreathingPlayer({ autoStart = false, exhaleSeconds, inhaleSeconds, minutes }: { autoStart?: boolean; exhaleSeconds: number; inhaleSeconds: number; minutes: number }) {
   const cycle = inhaleSeconds + exhaleSeconds;
   const totalBreaths = Math.max(1, Math.floor((minutes * 60) / cycle));
-  const [running, setRunning] = useState(false);
+  const [running, setRunning] = useState(autoStart);
   const [elapsed, setElapsed] = useState(0);
   const last = useRef<number>();
 
@@ -36,9 +37,9 @@ export function BreathingPlayer({ exhaleSeconds, inhaleSeconds, minutes }: { exh
   const style = { "--inhale": `${inhaleSeconds}s`, "--exhale": `${exhaleSeconds}s` } as CSSProperties;
 
   return (
-    <div className="pause-stage pause-tone-chill pause-breathing" style={style}>
-      <div className={`pause-breath-circle ${running ? (inhaling ? "in" : "out") : ""}`} aria-hidden="true" />
-      <p className="pause-breath-word">
+    <div className="pause-stage pause-breathing" style={style}>
+      <div className="pause-breath-sun"><SleepySun phase={running ? (inhaling ? "in" : "out") : undefined} /></div>
+      <p className="pause-breath-word" aria-live="polite">
         {done ? "Welcome back." : !running && elapsed === 0 ? "Ready when you are." : inhaling ? "Breathe in" : "Breathe out"}
       </p>
       <p className="pause-breath-meta">

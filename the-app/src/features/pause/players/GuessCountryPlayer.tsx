@@ -89,6 +89,7 @@ export function GuessCountryPlayer({ level, questions, rounds: count }: { level:
   const [picked, setPicked] = useState<string>();
   const [score, setScore] = useState(0);
   const next = useRef<HTMLButtonElement>(null);
+  const question = useRef<HTMLParagraphElement>(null);
   const round = rounds[index];
   const finished = started && index >= rounds.length;
 
@@ -112,23 +113,27 @@ export function GuessCountryPlayer({ level, questions, rounds: count }: { level:
   function advance() {
     setPicked(undefined);
     setIndex((value) => value + 1);
+    // The next question takes focus, so keyboard and screen-reader users hear it first.
+    window.requestAnimationFrame(() => question.current?.focus());
   }
 
   if (!started) {
     return (
       <div className="pause-stage pause-tone-discover pause-guess">
-        <p className="pause-breath-word">Pick a region</p>
-        <p className="pause-breath-meta">Or keep it wide open. Every round mixes things up.</p>
-        <div className="pause-chips pause-region-chips" role="radiogroup" aria-label="Region">
-          {REGIONS.map((option) => (
-            <label key={option} className="pause-chip">
-              <input type="radio" name="pause-region" checked={region === option} onChange={() => setRegion(option)} />
-              <span>{option}</span>
-            </label>
-          ))}
-        </div>
+        <fieldset className="pause-region-set">
+          <legend className="pause-breath-word">Pick a region</legend>
+          <p className="pause-breath-meta">Or keep it wide open. Every round mixes things up.</p>
+          <div className="pause-chips pause-region-chips">
+            {REGIONS.map((option) => (
+              <label key={option} className="pause-chip">
+                <input type="radio" name="pause-region" checked={region === option} onChange={() => setRegion(option)} />
+                <span>{option}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <div className="pause-stage-controls">
-          <button className="pause-button pause-button-ink" onClick={begin}>Start <ArrowRight size={18} /></button>
+          <button className="pause-button pause-button-ink" onClick={begin}>Start <ArrowRight size={18} aria-hidden="true" /></button>
         </div>
         <p className="pause-guess-credit">Outlines: Natural Earth (public domain). Facts: general reference.</p>
       </div>
@@ -141,7 +146,7 @@ export function GuessCountryPlayer({ level, questions, rounds: count }: { level:
         <p className="pause-breath-word">You got {score} of {rounds.length}.</p>
         <p className="pause-breath-meta">{score === rounds.length ? "Every single one. You're a walking atlas." : score >= rounds.length / 2 ? "A well-travelled eye." : "Maps are tricky. That's the fun."}</p>
         <div className="pause-stage-controls">
-          <button className="pause-button pause-button-ink" onClick={begin}><RotateCcw size={18} /> Play again</button>
+          <button className="pause-button pause-button-ink" onClick={begin}><RotateCcw size={18} aria-hidden="true" /> Play again</button>
           <button className="pause-button pause-button-quiet" onClick={() => setStarted(false)}>Change region</button>
         </div>
         <p className="pause-guess-credit">Outlines: Natural Earth (public domain). Facts: general reference.</p>
@@ -159,8 +164,8 @@ export function GuessCountryPlayer({ level, questions, rounds: count }: { level:
           <path d={round.answer.path} />
         </svg>
       ) : null}
-      {round.kind === "flag" ? <span className="pause-guess-flag" aria-hidden="true">{round.answer.flag}</span> : null}
-      <p className="pause-guess-question" id="pause-guess-q">{prompt(round)}</p>
+      {round.kind === "flag" ? <span className="pause-guess-flag" role="img" aria-label="The flag to name">{round.answer.flag}</span> : null}
+      <p className="pause-guess-question" id="pause-guess-q" tabIndex={-1} ref={question}>{prompt(round)}</p>
       <div className="pause-guess-options" role="group" aria-labelledby="pause-guess-q">
         {round.options.map((option) => {
           const isAnswer = option.id === round.answer.id;
@@ -188,7 +193,7 @@ export function GuessCountryPlayer({ level, questions, rounds: count }: { level:
       {picked ? (
         <div className="pause-stage-controls">
           <button ref={next} className="pause-button pause-button-ink" onClick={advance}>
-            {index + 1 < rounds.length ? "Next one" : "See how you did"} <ArrowRight size={18} />
+            {index + 1 < rounds.length ? "Next one" : "See how you did"} <ArrowRight size={18} aria-hidden="true" />
           </button>
         </div>
       ) : null}

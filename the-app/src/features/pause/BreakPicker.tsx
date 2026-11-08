@@ -21,11 +21,23 @@ export function BreakPicker({ onStart }: { onStart: (activityId: string) => void
   const dialog = useRef<HTMLDivElement>(null);
   const showing = result?.activity;
 
-  // Escape closes the pop-up, as in most dialogs.
+  // Escape closes the pop-up, as in most dialogs, and Tab stays inside it.
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
+      if (event.key !== "Tab" || !dialog.current) return;
+      const items = Array.from(dialog.current.querySelectorAll<HTMLElement>("button, input, a[href]")).filter((el) => !el.hasAttribute("disabled") && !(el instanceof HTMLInputElement && el.type === "radio" && !el.checked));
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

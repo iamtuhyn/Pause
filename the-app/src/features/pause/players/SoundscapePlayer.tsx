@@ -1,5 +1,6 @@
 import { Pause, Play, RotateCcw, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { RainScene, WaveScene } from "../Scenes";
 
 type Preset = "rain" | "waves";
 
@@ -123,7 +124,7 @@ function createEngine(preset: Preset): Engine {
 
 const FADE = 2;
 
-export function SoundscapePlayer({ minutes, preset }: { minutes: number; preset: Preset }) {
+export function SoundscapePlayer({ autoStart = false, minutes, preset }: { autoStart?: boolean; minutes: number; preset: Preset }) {
   const engine = useRef<Engine>();
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(0.7);
@@ -152,6 +153,14 @@ export function SoundscapePlayer({ minutes, preset }: { minutes: number; preset:
 
   useEffect(() => () => engine.current?.stop(), []);
 
+  // Started from the start screen: the click there counts as the gesture that lets audio play.
+  useEffect(() => {
+    if (!autoStart) return;
+    const timer = window.setTimeout(() => void toggle(), 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function toggle() {
     if (finished) return;
     if (!engine.current) engine.current = createEngine(preset);
@@ -178,10 +187,8 @@ export function SoundscapePlayer({ minutes, preset }: { minutes: number; preset:
   const minutesLeft = Math.ceil(left / 60);
 
   return (
-    <div className={`pause-stage pause-tone-chill pause-soundscape pause-soundscape-${preset} ${playing ? "is-playing" : ""}`}>
-      <div className="pause-soundscape-art" aria-hidden="true">
-        {Array.from({ length: 14 }, (_, i) => <span key={i} style={{ animationDelay: `${(i * 0.37) % 2}s`, left: `${(i * 7.3) % 100}%` }} />)}
-      </div>
+    <div className={`pause-stage pause-soundscape pause-soundscape-${preset}${playing ? " is-playing is-live" : ""}`}>
+      <div className="pause-soundscape-art" aria-hidden="true">{preset === "rain" ? <RainScene /> : <WaveScene />}</div>
       <p className="pause-breath-word">{finished ? "That's your break. Welcome back." : playing ? (preset === "rain" ? "Let the rain fall." : "Let the waves roll in.") : "Best with headphones."}</p>
       <p className="pause-breath-meta" aria-live="off">{finished ? "The sound has faded out." : minutesLeft > 1 ? `About ${minutesLeft} min left` : "Less than a minute left"}</p>
       <div className="pause-stage-controls">

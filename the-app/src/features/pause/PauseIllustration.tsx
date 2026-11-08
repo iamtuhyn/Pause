@@ -1,14 +1,14 @@
 import { MonitorStory } from "./MonitorStory";
 
 // Hand-drawn scene for the hero: an old monitor on a hill whose screen plays
-// a short story (a rushed workday, then Esc, then PAUSÉ). Flat shapes only, no external art.
+// a short story (a rushed workday, then Esc, then Descape). Flat shapes only, no external art.
 export function PauseIllustration() {
   return (
     <svg className="pause-scene" viewBox="0 0 1200 520" preserveAspectRatio="xMaxYMax slice" role="img" aria-labelledby="pause-scene-title">
-      <title id="pause-scene-title">An old computer monitor on a grassy hill. On its screen a rushed workday of design files, spreadsheets, slides and calendar alerts piles up, until a yellow Esc key is pressed and the calm PAUSÉ page appears.</title>
+      <title id="pause-scene-title">An old computer monitor on a grassy hill. On its screen a rushed workday of design files, spreadsheets, slides and calendar alerts piles up, until a yellow Esc key is pressed and the calm Descape page appears.</title>
 
-      <circle cx="930" cy="150" r="150" fill="#2C5CE6" />
-      <circle cx="930" cy="150" r="210" fill="none" stroke="#2C5CE6" strokeWidth="2" />
+      <circle cx="930" cy="260" r="140" fill="#2C5CE6" />
+      <circle cx="930" cy="260" r="190" fill="none" stroke="#2C5CE6" strokeWidth="2" />
 
       <g className="pause-cloud pause-cloud-a" fill="#FFFFFF">
         <ellipse cx="1040" cy="96" rx="70" ry="28" />

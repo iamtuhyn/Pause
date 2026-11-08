@@ -1,10 +1,11 @@
-import { ArrowLeft, LogIn } from "lucide-react";
+import { ArrowLeft, ArrowRight, Gamepad2, Lock, Mail, Medal, Sparkles, User } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { signInWithPassword } from "../../lib/blocks/auth";
 import { signUp } from "../../lib/blocks/account";
 import { isLoginConfigured } from "../../lib/blocks/config";
+import { AuthAlert, AuthField, AuthSide } from "./AuthParts";
 import { copy } from "./content";
 import { Wordmark } from "./Wordmark";
 import { useDisplayFont } from "./useDisplayFont";
@@ -27,6 +28,10 @@ const text = {
   busy: "One moment…",
   lead: "Sign in to carry your medals to any device and step into the full app.",
   leadUp: "Make a new account and start a few minutes at a time.",
+  cardTitle: "Welcome back",
+  cardTitleUp: "Make it yours",
+  cardLead: "Good to see you. Your games kept your seat warm.",
+  cardLeadUp: "One minute, then every break picks up where you left off.",
   guest: "No account? Every game here still plays without signing in.",
   back: "Back",
 };
@@ -85,6 +90,20 @@ export function PauseSignInPage({ onNavigate, returnTo }: { onNavigate: (path: s
     }
   }
 
+  // Arrow keys move between the two tabs, as in any tab list.
+  function onTabKey(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const next = tab === "signin" ? "signup" : "signin";
+    switchTab(next);
+    document.getElementById(`pause-tab-${next}`)?.focus();
+  }
+
+  const perks = [
+    { icon: Medal, text: "Your medals, on any device" },
+    { icon: Gamepad2, text: "The full app, with every game" },
+    { icon: Sparkles, text: "Every break picks up where you left off" }
+  ];
+
   return (
     <div className="pause-root pause-signin">
       <header className="pause-nav">
@@ -96,68 +115,78 @@ export function PauseSignInPage({ onNavigate, returnTo }: { onNavigate: (path: s
           <ArrowLeft size={18} aria-hidden="true" />
           {text.back}
         </button>
-        <a className="pause-button pause-button-quiet" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }}>
-          {copy.backToPause}
-        </a>
       </header>
 
       <main className="pause-auth">
-        <section className="pause-auth-side">
-          <h1>sign <span>in</span></h1>
-          <p>{tab === "signin" ? text.lead : text.leadUp}</p>
-          <p className="pause-auth-guest">{text.guest}</p>
-        </section>
+        <AuthSide
+          title={tab === "signin" ? "sign" : "join"}
+          accent="in"
+          lead={tab === "signin" ? text.lead : text.leadUp}
+          perks={perks}
+        />
 
-        <section className="pause-auth-card" aria-label={tab === "signin" ? text.signIn : text.signUp}>
-          <div className="pause-auth-tabs" role="tablist">
-            <button role="tab" aria-selected={tab === "signin"} onClick={() => switchTab("signin")}>{text.signIn}</button>
-            <button role="tab" aria-selected={tab === "signup"} onClick={() => switchTab("signup")}>{text.signUp}</button>
+        <section className="pause-auth-card" aria-labelledby="pause-auth-heading">
+          <div className="pause-auth-tabs" role="tablist" aria-label="Account" onKeyDown={onTabKey}>
+            {(["signin", "signup"] as Tab[]).map((option) => (
+              <button
+                key={option}
+                id={`pause-tab-${option}`}
+                role="tab"
+                aria-selected={tab === option}
+                aria-controls="pause-auth-panel"
+                tabIndex={tab === option ? 0 : -1}
+                onClick={() => switchTab(option)}
+              >
+                {option === "signin" ? text.signIn : text.signUp}
+              </button>
+            ))}
           </div>
 
-          {!configured ? <p className="pause-signin-alert" role="alert">{copy.signInNotConfigured}</p> : null}
-          {error ? <p className="pause-signin-alert" role="alert">{error}</p> : null}
+          <div id="pause-auth-panel" role="tabpanel" aria-labelledby={`pause-tab-${tab}`} className="pause-auth-panel">
+            <div className="pause-auth-head">
+              <h2 id="pause-auth-heading">{tab === "signin" ? text.cardTitle : text.cardTitleUp}</h2>
+              <p>{tab === "signin" ? text.cardLead : text.cardLeadUp}</p>
+            </div>
 
-          {tab === "signup" && created ? (
-            <p className="pause-auth-done" role="status">{text.signUpDone}</p>
-          ) : (
-            <form className="pause-auth-form" onSubmit={submit}>
-              {tab === "signup" ? (
-                <label>
-                  <span>{text.name}</span>
-                  <input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required />
-                </label>
-              ) : null}
-              <label>
-                <span>{text.email}</span>
-                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
-              </label>
-              <label>
-                <span>{text.password}</span>
-                <input
+            {!configured ? <AuthAlert>{copy.signInNotConfigured}</AuthAlert> : null}
+            {error ? <AuthAlert>{error}</AuthAlert> : null}
+
+            {tab === "signup" && created ? (
+              <p className="pause-auth-done" role="status">{text.signUpDone}</p>
+            ) : (
+              <form className="pause-auth-form" onSubmit={submit} noValidate={false}>
+                {tab === "signup" ? (
+                  <AuthField icon={User} label={text.name} value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required />
+                ) : null}
+                <AuthField icon={Mail} label={text.email} type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
+                <AuthField
+                  icon={Lock}
+                  label={text.password}
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete={tab === "signin" ? "current-password" : "new-password"}
                   required
                 />
-              </label>
-              {tab === "signin" ? (
-                <div className="pause-auth-row">
-                  <label className="pause-auth-check">
-                    <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
-                    <span>{text.remember}</span>
-                  </label>
-                  <a href="/pause/reset-password" onClick={(event) => { event.preventDefault(); onNavigate("/pause/reset-password"); }}>{text.forgot}</a>
-                </div>
-              ) : (
-                <p className="pause-auth-note">{text.signUpNote}</p>
-              )}
-              <button className="pause-button pause-button-ink" type="submit" disabled={!configured || pending}>
-                <LogIn size={18} aria-hidden="true" />
-                {pending ? text.busy : tab === "signin" ? text.signIn : text.signUp}
-              </button>
-            </form>
-          )}
+                {tab === "signin" ? (
+                  <div className="pause-auth-row">
+                    <label className="pause-auth-check">
+                      <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+                      <span>{text.remember}</span>
+                    </label>
+                    <a href="/pause/reset-password" onClick={(event) => { event.preventDefault(); onNavigate("/pause/reset-password"); }}>{text.forgot}</a>
+                  </div>
+                ) : (
+                  <p className="pause-auth-note">{text.signUpNote}</p>
+                )}
+                <button className="pause-button pause-button-ink pause-auth-submit" type="submit" disabled={!configured || pending}>
+                  {pending ? text.busy : tab === "signin" ? text.signIn : text.signUp}
+                  <ArrowRight size={18} aria-hidden="true" />
+                </button>
+              </form>
+            )}
+            <p className="pause-auth-guest">{text.guest}</p>
+          </div>
         </section>
       </main>
     </div>

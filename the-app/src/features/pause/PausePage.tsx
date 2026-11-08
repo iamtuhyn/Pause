@@ -7,6 +7,8 @@ import { dailyDrop, playableActivities, playableCount } from "./catalog/catalog"
 import { contributions, copy, pillars } from "./content";
 import { GamePreview } from "./GamePreview";
 import { PauseIllustration } from "./PauseIllustration";
+import { CardScene } from "./CardScene";
+import { RoadTrip } from "./Scenes";
 import { useDisplayFont } from "./useDisplayFont";
 import "./pause.css";
 import { Wordmark } from "./Wordmark";
@@ -48,11 +50,12 @@ export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }
 
   return (
     <div className="pause-root">
+      <a className="pause-skip" href="#pause-main">Skip to the activities</a>
       <main>
         <div className="pause-hero">
         <header className="pause-nav">
           <a className="pause-logo" aria-label={copy.brand} href="/" onClick={go("/")}>
-            <Wordmark />
+            <Wordmark animate />
           </a>
           <nav className="pause-links" aria-label="Main">
             <a href="#pause-play">{copy.navPlay}</a>
@@ -97,7 +100,7 @@ export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }
         </div>
 
 
-        <section className="pause-block" aria-labelledby="pause-pillars-title">
+        <section className="pause-block" id="pause-main" tabIndex={-1} aria-labelledby="pause-pillars-title">
           <div className="pause-block-head">
             <h2 id="pause-pillars-title">{copy.pillarsTitle} <span>{copy.pillarsAccent}</span></h2>
             <p>{copy.pillarsLead}</p>
@@ -142,7 +145,7 @@ export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }
                   <p>{activity.summary}</p>
                   {/* Only medals already earned: empty slots read as a to-do list. */}
                   {count ? (
-                    <span className="pause-medals" aria-label={`${copy.medalsLabel}: ${count}`}>
+                    <span className="pause-medals" role="img" aria-label={`${copy.medalsLabel}: ${count}`}>
                       {tiers.filter((tier) => won[tier.id]).map((tier) => (
                         <span
                           key={tier.id}
@@ -173,6 +176,7 @@ export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }
                   <a className="pause-stretched" href={`/pause/play/${activity.id}`} onClick={go(`/pause/play/${activity.id}`)}>{activity.title}</a>
                 </h3>
                 <p>{activity.summary}</p>
+                <CardScene activity={activity} />
                 <ArrowRight size={18} aria-hidden="true" className="pause-unwind-arrow" />
               </li>
             ))}
@@ -184,6 +188,18 @@ export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }
             <h2 id="pause-somewhere-title">{copy.somewhereTitle}</h2>
             <p>{copy.somewhereLead}</p>
           </div>
+          <a className="pause-trip" href="/pause/somewhere" onClick={go("/pause/somewhere")}>
+            <span className="pause-trip-copy">
+              <span className="pause-trip-eyebrow">{copy.somewhereEyebrow}</span>
+              <span className="pause-trip-title">{copy.somewhereInvite}</span>
+              <span className="pause-trip-button">
+                <Shuffle size={20} aria-hidden="true" />
+                {copy.somewhereCta}
+                <ArrowRight size={20} aria-hidden="true" />
+              </span>
+            </span>
+            <span className="pause-trip-scene" aria-hidden="true"><RoadTrip /></span>
+          </a>
           {discover.length ? (
             <ul className="pause-unwind pause-unwind-discover">
               {discover.map((activity) => (
@@ -193,18 +209,12 @@ export function PausePage({ onNavigate }: { onNavigate: (path: string) => void }
                     <a className="pause-stretched" href={`/pause/play/${activity.id}`} onClick={go(`/pause/play/${activity.id}`)}>{activity.title}</a>
                   </h3>
                   <p>{activity.summary}</p>
+                  <CardScene activity={activity} />
                   <ArrowRight size={18} aria-hidden="true" className="pause-unwind-arrow" />
                 </li>
               ))}
             </ul>
           ) : null}
-          <div className="pause-somewhere-cta">
-            <p>{copy.somewhereInvite}</p>
-            <a className="pause-button pause-button-ink" href="/pause/somewhere" onClick={go("/pause/somewhere")}>
-              <Shuffle size={18} aria-hidden="true" />
-              {copy.somewhereCta}
-            </a>
-          </div>
         </section>
 
         <section className="pause-block" id="pause-community" aria-labelledby="pause-community-title">

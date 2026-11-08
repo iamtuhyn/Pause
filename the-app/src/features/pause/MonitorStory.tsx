@@ -58,7 +58,6 @@ export function MonitorStory({ x, y }: { x: number; y: number }) {
         <g className="ms-rush">
           <rect width="256" height="172" fill="#E4DFD1" />
           <rect width="256" height="11" fill="#0E1B4D" />
-          <text x="8" y="7.6" fontSize="5.4" fontWeight="700" fill="#FFFFFF" style={ui}>Monday</text>
           {clock.map((time, i) => (
             <text key={time} className={i === clock.length - 1 ? "ms-clock ms-clock-last" : "ms-clock"} style={{ ...ui, ...at(i * 1.1) }} x="248" y="7.6" fontSize="5.4" fontWeight="700" textAnchor="end" fill="#FFD84D">{time}</text>
           ))}
