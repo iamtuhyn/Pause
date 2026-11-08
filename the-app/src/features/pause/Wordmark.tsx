@@ -1,11 +1,14 @@
-// The Descape wordmark: the Esc key sits in the middle of the word, D-[Esc]-ape.
-// Decorative, because the link around it carries the name for screen readers.
+// The Descape wordmark: every letter is a keyboard key, D-[Esc]-A-P-E, with only
+// Esc in yellow. Decorative, because the link around it carries the name for
+// screen readers.
+const KEYS = ["D", "Esc", "A", "P", "E"];
+
 export function Wordmark() {
   return (
     <span className="pause-wordmark" aria-hidden="true">
-      <span>D</span>
-      <span className="pause-key">Esc</span>
-      <span>ape</span>
+      {KEYS.map((key) => (
+        <span key={key} className={key === "Esc" ? "pause-wordmark-key is-esc" : "pause-wordmark-key"}>{key}</span>
+      ))}
     </span>
   );
 }

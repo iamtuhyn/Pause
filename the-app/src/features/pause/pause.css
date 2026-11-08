@@ -508,8 +508,13 @@
 .pause-somewhere-links { display: flex; flex-wrap: wrap; gap: 10px; }
 
 /* Wordmark: D [Esc] ape, with the keycap sitting in the middle of the word */
-.pause-wordmark { align-items: center; display: inline-flex; gap: 3px; }
-.pause-wordmark .pause-key { font-size: 12px; margin: 0 2px; padding: 3px 7px 5px; }
+/* Keys are sized in em, so the wordmark scales with .pause-logo (22px header, 18px footer). */
+.pause-wordmark { align-items: center; display: inline-flex; gap: 0.12em; line-height: 1; }
+.pause-wordmark-key {
+  align-items: center; background: #fff; border-radius: 0.32em; box-shadow: inset 0 0 0 0.06em #b9b09a, inset 0 -0.14em 0 #d6cfbb; box-sizing: border-box;
+  color: var(--pause-ink); display: inline-flex; font: 700 0.62em/1 ui-sans-serif, system-ui, sans-serif; height: 1.85em; justify-content: center; min-width: 1.85em; padding: 0 0.3em;
+}
+.pause-wordmark-key.is-esc { background: var(--pause-sun); box-shadow: inset 0 -0.14em 0 #d9b21f; color: var(--pause-sun-ink); font-size: 0.55em; height: 2.09em; min-width: 3.2em; }
 
 /* Greyed world map for the continent step */
 .pause-worldmap { display: block; margin: 0 auto 28px; max-width: 960px; width: 100%; }
